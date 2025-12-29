@@ -1,0 +1,15 @@
+{
+    "configurations": [
+        {
+            "name": "Mac",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "/opt/homebrew/opt/libevent/include/**",
+                "/opt/homebrew/opt/libevent/include/event2/**"
+            ],
+            "defines": [],
+            "compilerPath": "/usr/bin/clang++"
+        }
+    ],
+    "version": 4
+}

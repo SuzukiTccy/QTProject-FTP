@@ -1,0 +1,173 @@
+#include <thread>
+#include <iostream>
+
+#include <unistd.h>           // POSIX API
+#include <event2/event.h>
+
+#include "XThread.h"
+#include "XTask.h"
+#include "testUtil.h"
+
+
+
+
+static void Notify_cb(evutil_socket_t fd, short event, void *arg){
+    XThread *t = (XThread *)arg;
+    t->Notify(fd, event);
+}
+
+
+void XThread::Notify(evutil_socket_t fd, short event){
+    Logger::info("XThread::Notify() -> Thread_id ", id);
+
+    // 1. 读取管道中的数据
+    char buf[1] = {0};
+    int re = read(fd, buf, 1);
+    if(re < 0){
+        Logger::error("XThread::Notify() -> Thread_id ", id, " read() error");
+        return;
+    }
+    if(re == 0){
+        Logger::info("XThread::Notify() -> Thread_id ", id,  " read() return 0");
+        return;
+    }
+    Logger::info("XThread::Notify() -> Thread_id ", id, " recv: ", buf);
+    if(buf[0] == 's'){
+        Logger::info("XThread::Notify() -> Thread_id ", id, " : stop");
+        event_base_loopbreak(base);  // 停止事件循环
+        return;
+    }
+
+    // 2. 取出任务并执行
+    XTask *t = nullptr;
+    t = tasks_list.front();
+    tasks_list.pop_front();
+    tasks_mutex.unlock();
+    t->Init();
+}
+
+
+bool XThread::Start(){
+    Logger::info("XThread::Start() -> Thread_id ", id);
+    if(!Setup()){
+	    Logger::error("XThread::Start() Setup failed");
+	    return false;
+	}
+    pthread = new std::thread(&XThread::Main, this);
+    if(pthread == nullptr){
+        Logger::error("XThread::Start() -> Thread_id ", id, ": pthread is nullptr");
+        return false;
+    }
+    return true;
+}
+
+
+
+void XThread::Main(){
+    Logger::info("XThread::Main() -> Thread_id ", id);
+    int ret = event_base_dispatch(base);
+	if(ret == -1){
+	    Logger::error("XThread::Main() -> Thread_id ", id, ": event_base_dispatch failed");
+	}
+    event_free(notify_event);
+    event_base_free(base);
+    Logger::info("XThread::Main() -> Thread_id ", id, " exit");
+}
+
+
+bool XThread::Setup(){
+    Logger::info("XThread::Setup() -> Thread_id ", id);
+    
+    int fds[2];
+    if(pipe(fds)){
+        Logger::error("XThread::Setup() -> Thread_id ", id, ": pipe() error");
+        return false;
+    }
+
+    notify_recv_fd = fds[0];
+    notify_send_fd = fds[1];
+
+    event_config *ev_conf = event_config_new();
+    event_config_set_flag(ev_conf, EVENT_BASE_FLAG_NOLOCK);
+    this->base = event_base_new_with_config(ev_conf);
+    event_config_free(ev_conf);
+    if(!base){
+        Logger::error("XThread::Setup() -> Thread_id ", id, ": event_base_new_with_config() error");
+        return false;
+    }
+
+    notify_event = event_new(base, notify_recv_fd, EV_READ | EV_PERSIST, Notify_cb, this);
+    event_add(notify_event, NULL);
+
+    return true;
+}
+
+
+
+void XThread::Activate(){
+    Logger::info("XThread::Activate() -> Thread_id ", id);
+
+    // 1. 检查任务队列是否为空
+    tasks_mutex.lock();
+    if(tasks_list.empty()){
+        tasks_mutex.unlock();
+        return;
+    }
+    tasks_mutex.unlock();
+
+    // 2. 写管道，激活线程
+    int re = write(notify_send_fd, "c", 1);
+    if(re <= 0){
+        Logger::error("XThread::Activate() -> Thread_id ", id, ": write() error");
+        return;
+    }
+}
+
+
+void XThread::AddTask(XTask *t){
+    Logger::info("XThread::AddTask() -> Thread_id ", id);
+
+    t->base = this->base;
+    if(t == nullptr){
+        Logger::error("XThread::AddTask() -> Thread_id ", id, ": XTask is nullptr");
+        return;
+    }
+    tasks_mutex.lock();
+    tasks_list.push_back(t);
+    tasks_mutex.unlock();
+
+    Activate(); // 唤醒线程
+}
+
+
+void XThread::Stop(){
+    Logger::info("XThread::Stop() -> Thread_id ", id);
+
+    // 1. 写管道，停止线程
+    int re = write(notify_send_fd, "s", 1);
+    if(re <= 0){
+        Logger::error("XThread::Stop() -> Thread_id ", id, 
+                    ": write() error. Detail: ", strerror(errno));
+    }
+}
+
+
+XThread::~XThread(){
+    Stop();
+
+    if(pthread){
+        if(pthread->joinable()) pthread->join();    // 等待线程结束
+        delete pthread;
+        pthread = nullptr;
+        Logger::info("XThread::Stop() -> Thread_id ", id, " delete pthread");
+    }
+
+    for(auto t : tasks_list){
+        delete t;
+        t = nullptr;
+        Logger::info("XThread::Stop() -> Thread_id ", id, " delete task");
+    }
+    close(notify_recv_fd);
+    close(notify_send_fd);
+
+}
