@@ -56,7 +56,7 @@ void XFtpServerCMD::Event(bufferevent *bev, short events){
         Logger::info("XFtpServerCMD::Event() connection timeout");
         
 		// 发送超时响应
-        string msg = "421 Service not available, closing control connection.\r\n";
+        string msg = "421 Service closing control connection due to timeout.\r\n";
         bufferevent_write(bev, msg.c_str(), msg.size());
     }
 
