@@ -16,7 +16,7 @@ public:
 
     void Init(int threadNum);
 
-    void Dispatch(XTask* task);
+    void Dispatch(std::shared_ptr<XFtpServerCMD> task);
 private:
     int threadCount;
     int lastThread = -1;

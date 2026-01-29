@@ -1,7 +1,8 @@
-#include "XThreadPool.h"
 #include <thread>
 #include <iostream>
 #include <chrono>
+#include "XThreadPool.h"
+#include "XFtpServerCMD.h"
 #include "testUtil.h"
 
 
@@ -25,7 +26,7 @@ void XThreadPool::Init(int threadNum){
 }
 
 
-void XThreadPool::Dispatch(XTask* task){
+void XThreadPool::Dispatch(std::shared_ptr<XFtpServerCMD> task){
     Logger::info("XThreadPool::Dispatch()");
 
     if(task == nullptr){

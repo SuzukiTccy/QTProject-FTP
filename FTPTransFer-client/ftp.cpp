@@ -18,6 +18,9 @@ Ftp::~Ftp()
 
 bool Ftp::login(const FTP_DATA &data)
 {
+    savedFtpData = data;
+    currentRetryCount = 0;
+    isConnecting = false;
     if(!ftp->Connect(data.host.toStdString().c_str())) return false;
     return ftp->Login(data.user.toStdString().c_str(), data.pass.toStdString().c_str());
 }
@@ -85,7 +88,38 @@ std::vector<FTP_FILE_INFO> Ftp::dir()
 
 bool Ftp::cd(const QString &path)
 {
-    return ftp->Chdir(path.toStdString().c_str());
+    // return ftp->Chdir(path.toStdString().c_str());
+
+    bool success = ftp->Chdir(path.toStdString().c_str());
+    if(success) return success;
+
+    QString res = this->error();
+
+    // 如果是超时错误，尝试重连
+    if(res.contains("timeout", Qt::CaseInsensitive) ||
+        res.contains("timed out", Qt::CaseInsensitive)) {
+
+        qInfoTime() << "cd命令超时，尝试重连后重试...";
+
+        if(this->reconnect()) {
+            // 重连成功，重新尝试cd命令
+            success = ftp->Chdir(path.toStdString().c_str());
+            if(success) {
+                qInfoTime() << "重连后cd命令成功";
+                return true;
+            } else {
+                qCriticalTime() << "重连后cd命令仍然失败: " << this->error();
+                return false;
+            }
+        } else {
+            qCriticalTime() << "重连失败";
+            return false;
+        }
+    }
+
+    // 非超时错误，直接返回失败
+    qCriticalTime() << "cd命令失败: " <<  res;
+    return false;
 }
 
 bool Ftp::cdup()
@@ -116,4 +150,49 @@ bool Ftp::del(const QString &file)
 QString Ftp::error()
 {
     return ftp->LastResponse();
+}
+
+bool Ftp::reconnect(){
+
+    if (isConnecting) {
+        qWarningTime() << "已在重连中，跳过";
+        return false;
+    }
+
+    if (currentRetryCount >= maxRetryCount) {
+        qCriticalTime() << "已达到最大重连次数: " << maxRetryCount;
+        return false;
+    }
+
+    if (savedFtpData.host.isEmpty() || savedFtpData.user.isEmpty()) {
+        qCriticalTime() << "无保存的连接信息";
+        return false;
+    }
+
+    isConnecting = true;
+    currentRetryCount++;
+
+    qInfoTime() << "尝试第 " << currentRetryCount << " 次重连...";
+
+    // 关闭旧连接
+    if (ftp) {
+        ftp->Quit();
+        delete ftp;
+        ftp = nullptr;
+    }
+
+    // 创建新连接
+    ftp = new ftplib();
+    bool success = this->login(savedFtpData);
+
+    isConnecting = false;
+
+    if(success){
+        qInfoTime() << "重连成功";
+        currentRetryCount = 0;  // 重置重试计数
+        return true;
+    } else {
+        qCriticalTime() << "重连失败";
+        return false;
+    }
 }

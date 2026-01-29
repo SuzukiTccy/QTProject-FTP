@@ -43,7 +43,7 @@ void listen_cb(struct evconnlistener *evl, evutil_socket_t fd,
 {
     Logger::info("Main Thread: New connection");
     // sockaddr_in *sin = (sockaddr_in *)addr; // 当前未使用
-    XTask *cmdTask = XFtpFactory::Get()->CreateTask();
+    std::shared_ptr<XFtpServerCMD>cmdTask = XFtpFactory::Get()->CreateTask();
     cmdTask->sock = fd;
 
     XThreadPoolGet->Dispatch(cmdTask);

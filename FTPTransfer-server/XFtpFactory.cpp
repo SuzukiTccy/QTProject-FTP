@@ -10,9 +10,10 @@
 #include "testUtil.h"
 #include <memory>           // 智能指针
 
-XTask *XFtpFactory::CreateTask(){
+std::shared_ptr<XFtpServerCMD> XFtpFactory::CreateTask(){
     Logger::debug("XFtpFactory::CreateTask()");
-    XFtpServerCMD *cmd = new XFtpServerCMD();
+    // XFtpServerCMD *cmd = new XFtpServerCMD();
+    std::shared_ptr<XFtpServerCMD> cmd = std::make_shared<XFtpServerCMD>();
 
     cmd->Reg("USER", new XFtpUSER());
     cmd->Reg("PORT", new XFtpPORT());

@@ -18,5 +18,5 @@ public:
 
 private:
     std::map<std::string, XFtpTask*> calls_map;  // 命令注册表
-    std::map<XFtpTask*, int> callsDel_map;       // 任务删除标记表
+    // std::map<XFtpTask*, int> callsDel_map;       // 任务删除标记表
 };

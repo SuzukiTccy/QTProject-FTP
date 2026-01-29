@@ -39,9 +39,9 @@ void XThread::Notify(evutil_socket_t fd, short event){
     }
 
     // 2. 取出任务并执行
-    XTask *t = nullptr;
+    std::shared_ptr<XFtpServerCMD> t = nullptr;
     t = tasks_list.front();
-    tasks_list.pop_front();
+    // tasks_list.pop_front();
     tasks_mutex.unlock();
     t->Init();
 }
@@ -124,7 +124,7 @@ void XThread::Activate(){
 }
 
 
-void XThread::AddTask(XTask *t){
+void XThread::AddTask(std::shared_ptr<XFtpServerCMD> t){
     Logger::info("XThread::AddTask() -> Thread_id ", id);
 
     t->base = this->base;
@@ -155,18 +155,14 @@ void XThread::Stop(){
 XThread::~XThread(){
     Stop();
 
+    // 等待线程结束
     if(pthread){
-        if(pthread->joinable()) pthread->join();    // 等待线程结束
+        if(pthread->joinable()) pthread->join();
         delete pthread;
         pthread = nullptr;
-        Logger::info("XThread::Stop() -> Thread_id ", id, " delete pthread");
+        Logger::info("XThread::~XThread() -> Thread_id ", id, " delete pthread");
     }
 
-    for(auto t : tasks_list){
-        delete t;
-        t = nullptr;
-        Logger::info("XThread::Stop() -> Thread_id ", id, " delete task");
-    }
     close(notify_recv_fd);
     close(notify_send_fd);
 

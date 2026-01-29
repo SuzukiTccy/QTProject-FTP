@@ -33,6 +33,7 @@ bool XFtpServerCMD::Init(){
     this->bev = bev;
     Setcb(bev);
 
+    Logger::info("XFtpServerCMD::Init() finished");
     return true;
 }
 
@@ -59,10 +60,8 @@ void XFtpServerCMD::Event(bufferevent *bev, short events){
         string msg = "421 Service closing control connection due to timeout.\r\n";
         bufferevent_write(bev, msg.c_str(), msg.size());
     }
-
     // 关闭连接
     ClosePORT();
-    Logger::info("XFtpServerCMD::Event() -> Control connection timeout, closing connection");
 }
 
 
@@ -160,7 +159,7 @@ void XFtpServerCMD::Reg(std::string cmd, XFtpTask *call){
     call->base = base;
     call->cmdTask = this;
     calls_map[cmd] = call;
-    callsDel_map[call] = 0;
+    // callsDel_map[call] = 0;
 }
 
 
@@ -170,15 +169,19 @@ XFtpServerCMD::~XFtpServerCMD(){
 
     // 清理注册的命令处理器
     for(auto &pair : calls_map){
+        Logger::info("XFtpServerCMD::~XFtpServerCMD() delete ", pair.second, " ", pair.first);
+        if(pair.second != nullptr) continue;
         delete pair.second;
+        pair.second = nullptr;
     }
     calls_map.clear();
 
     // 清理删除的命令处理器
-    for(auto &pair : callsDel_map){
-        delete pair.first;
-    }
-    callsDel_map.clear();
+    // for(auto &pair : callsDel_map){
+    //     delete pair.first;
+    //     Logger::info("XFtpServerCMD::~XFtpServerCMD() delete ", pair.first);
+    // }
+    // callsDel_map.clear();
 
     // 清理控制连接的bev
     if (bev && cmdTask == this){
