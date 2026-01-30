@@ -40,8 +40,8 @@ void XThread::Notify(evutil_socket_t fd, short event){
 
     // 2. 取出任务并执行
     std::shared_ptr<XFtpServerCMD> t = nullptr;
-    t = active_tasks.front();
-    // active_tasks.pop_front();
+    t = connect_tasks.front();
+    connect_tasks.pop();
     tasks_mutex.unlock();
     t->Init();
 }
@@ -135,6 +135,7 @@ void XThread::AddTask(std::shared_ptr<XFtpServerCMD> t){
     }
     tasks_mutex.lock();
     active_tasks.push_back(t);
+    connect_tasks.push(t);
     tasks_mutex.unlock();
 
     Activate(); // 唤醒线程
@@ -161,7 +162,7 @@ void XThread::clearConnectedTasks(XFtpServerCMD* task){
     }
     
     for(auto it = active_tasks.begin(); it != active_tasks.end(); it++){
-        if(it->get() == task){
+        if(it->get()->cmdTask == task){
             active_tasks.erase(it);
             Logger::info("XThread::clearConnectedTasks() -> Thread_id ", id, 
                 ": XFtpServerCMD ", task, " ip :", task->ip,
