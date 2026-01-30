@@ -62,6 +62,8 @@ void XFtpServerCMD::Event(bufferevent *bev, short events){
     }
     // 关闭连接
     ClosePORT();
+    this->thread->clearConnectedTasks(this);
+    Logger::info("XFtpServerCMD::Event() close connection");
 }
 
 

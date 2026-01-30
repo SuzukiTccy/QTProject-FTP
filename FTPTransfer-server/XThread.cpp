@@ -40,8 +40,8 @@ void XThread::Notify(evutil_socket_t fd, short event){
 
     // 2. 取出任务并执行
     std::shared_ptr<XFtpServerCMD> t = nullptr;
-    t = tasks_list.front();
-    // tasks_list.pop_front();
+    t = active_tasks.front();
+    // active_tasks.pop_front();
     tasks_mutex.unlock();
     t->Init();
 }
@@ -109,7 +109,7 @@ void XThread::Activate(){
 
     // 1. 检查任务队列是否为空
     tasks_mutex.lock();
-    if(tasks_list.empty()){
+    if(active_tasks.empty()){
         tasks_mutex.unlock();
         return;
     }
@@ -128,12 +128,13 @@ void XThread::AddTask(std::shared_ptr<XFtpServerCMD> t){
     Logger::info("XThread::AddTask() -> Thread_id ", id);
 
     t->base = this->base;
+    t->thread = this;
     if(t == nullptr){
         Logger::error("XThread::AddTask() -> Thread_id ", id, ": XTask is nullptr");
         return;
     }
     tasks_mutex.lock();
-    tasks_list.push_back(t);
+    active_tasks.push_back(t);
     tasks_mutex.unlock();
 
     Activate(); // 唤醒线程
@@ -148,6 +149,25 @@ void XThread::Stop(){
     if(re <= 0){
         Logger::error("XThread::Stop() -> Thread_id ", id, 
                     ": write() error. Detail: ", strerror(errno));
+    }
+}
+
+
+void XThread::clearConnectedTasks(XFtpServerCMD* task){
+    Logger::info("XThread::clearConnectedTasks() -> Thread_id ", id);
+    if(!task){
+        Logger::error("XThread::clearConnectedTasks() -> Thread_id ", id, ": task is nullptr");
+        return;
+    }
+    
+    for(auto it = active_tasks.begin(); it != active_tasks.end(); it++){
+        if(it->get() == task){
+            active_tasks.erase(it);
+            Logger::info("XThread::clearConnectedTasks() -> Thread_id ", id, 
+                ": XFtpServerCMD ", task, " ip :", task->ip,
+                "removed from active_tasks");
+            return;
+        }
     }
 }
 

@@ -8,7 +8,7 @@
 #include "XTask.h"
 #include "XFtpServerCMD.h"
 
-class XTask;                  // 前向声明，避免循环依赖
+class XFtpServerCMD;                  // 前向声明，避免循环依赖
 struct event_base;            // libevent事件循环前向声明
 
 /**
@@ -73,6 +73,12 @@ public:
     void Stop();
 
     /**
+     * @brief 清理已完成的任务
+     * 从活动任务映射中移除已断开连接的任务
+     */
+    void clearConnectedTasks(XFtpServerCMD* task);
+
+    /**
      * @brief 构造函数
      */
     XThread(){};
@@ -90,7 +96,7 @@ private:
     evutil_socket_t notify_send_fd = -1;      //< 通知管道的发送端文件描述符，用于唤醒事件循环
     evutil_socket_t notify_recv_fd = -1;      // 管道读端
     event_base* base = nullptr;               //< libevent事件循环基座，管理所有事件和回调
-    std::list<std::shared_ptr<XFtpServerCMD>> tasks_list;             //< 任务队列，存储待处理的XTask对象指针
+    std::list<std::shared_ptr<XFtpServerCMD>> active_tasks;             //< 任务队列，存储待处理的XTask对象指针
     std::mutex tasks_mutex;                   //< 任务队列互斥锁，保证线程安全访问
     struct event *notify_event;               // 通知事件对象
 };

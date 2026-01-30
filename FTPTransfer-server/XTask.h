@@ -12,7 +12,7 @@ public:
 	int sock = 0;
 
 	// 线程池中的线程ID
-	int thread_id = 0;
+	int thread_id = -1;
 
 	// 强制子类实现初始化逻辑
 	virtual bool Init() = 0;
