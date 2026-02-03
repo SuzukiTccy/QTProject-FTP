@@ -89,7 +89,7 @@ std::vector<FTP_FILE_INFO> Ftp::dir()
 bool Ftp::cd(const QString &path)
 {
     // return ftp->Chdir(path.toStdString().c_str());
-
+    qInfoTime() << "Ftp::cd() path: " << path;
     bool success = ftp->Chdir(path.toStdString().c_str());
     if(success) return success;
 

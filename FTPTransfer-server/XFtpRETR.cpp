@@ -93,11 +93,11 @@ void XFtpRETR::Parse(string cmd, string msg){
     }
 
     // 2. 构建完整文件路径
-    string path = cmdTask->curDir + filename;
+    string path = cmdTask->rootDir + cmdTask->curDir + filename;
     Logger::debug("XFtpRETR::Parse() path: ", path);
 
     // 3. 打开文件（二进制读取模式）
-    fp = fopen(path.c_str(), "rb");
+    fp = fopen(path.c_str(), "rb");  // 二进制流式传输
     if (!fp) {
         // 检查具体错误类型
         if (errno == ENOENT) {

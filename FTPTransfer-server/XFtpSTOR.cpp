@@ -95,7 +95,7 @@ void XFtpSTOR::Parse(string cmd, string msg){
     string path = cmdTask->rootDir + cmdTask->curDir + filename;
     Logger::info("XFtpSTOR::Parse() path: " + path);
     // 3. 以二进制写模式打开文件
-    fp = fopen(path.c_str(), "wb");
+    fp = fopen(path.c_str(), "wb");  // 二进制流式传输
     if(!fp){
         int err = errno;
         string error_msg;

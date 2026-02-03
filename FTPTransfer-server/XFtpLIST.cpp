@@ -140,6 +140,7 @@ string XFtpLIST::GetListData(string path){
 void XFtpLIST::Parse(string cmd, string msg){
     cout << endl;
     Logger::debug("XFtpLIST::Parse()");
+    Logger::debug("XFtpLIST::Parse() msg: ", msg);
     
     string resmsg = "";
     
@@ -216,10 +217,12 @@ void XFtpLIST::Parse(string cmd, string msg){
         if(curDir[curDir.size() - 1] != '/'){
             curDir += "/";
         }
-        
+        path = cmdTask->rootDir + curDir;
+        Logger::debug("XFtpLIST::Parse() curDir1: ", curDir);
+        Logger::debug("XFtpLIST::Parse() path: ", path);
         // 检查目录是否存在
         struct stat s_buf;                    // 定义文件状态结构体
-        int result = stat(curDir.c_str(), &s_buf);         // 获取目录状态信息
+        int result = stat(path.c_str(), &s_buf);         // 获取目录状态信息
         if (result != 0) {
             if (errno == ENOENT) {
                 ResCMD("550 Directory does not exist.\r\n");

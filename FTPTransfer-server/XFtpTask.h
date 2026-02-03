@@ -10,8 +10,8 @@ class XFtpTask : public XTask
 {
 public:
     // FTP会话状态信息
-    string curDir = "/";             // 当前工作目录（客户端所在目录）
-    string rootDir = "/";            // 根目录（限制用户访问的文件系统范围）
+    string curDir = "Desktop/";             // 当前工作目录（客户端所在目录）
+    string rootDir = "/Users/ccy/";            // 根目录（限制用户访问的文件系统范围）
     string ip = "";                  // 客户端IP地址（用于数据连接）
     int port = 0;                    // 数据连接端口号（PORT模式使用）
     XFtpTask *cmdTask = nullptr;     // 指向控制连接的FTP任务对象（用于响应命令）

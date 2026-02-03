@@ -54,8 +54,8 @@ private:
     Ftp& operator=(const Ftp&) = delete;
 
 private:
-    ftplib* ftp;             // 指向ftplib库的FTP连接句柄，用于所有底层FTP操作
-    std::string cur_path;    // 当前FTP服务器路径，缓存以减少频繁的PWD命令调用
+    ftplib* ftp;                  // 指向ftplib库的FTP连接句柄，用于所有底层FTP操作
+    std::string cur_path;         // 当前FTP服务器路径，缓存以减少频繁的PWD命令调用
     FTP_DATA savedFtpData;        // 保存连接信息
     int maxRetryCount = 3;        // 最大重试次数
     int currentRetryCount = 0;    // 当前重试次数

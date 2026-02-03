@@ -4,6 +4,7 @@
 #include <QMessageBox>
 #include <QCloseEvent>
 #include <QFileDialog>
+#include <QStandardPaths>
 #include <QFile>
 
 
@@ -281,7 +282,10 @@ void MainWindow::getAction()
     }
     QFileDialog file(this,"下载文件到");
     file.setFileMode(QFileDialog::FileMode::AnyFile);
+    QString downloadPath = QStandardPaths::writableLocation(QStandardPaths::DownloadLocation);
+    file.setDirectory(downloadPath);
     file.selectFile(ui->list_file->item(row,6)->text());
+    qDebugTime() << "MainWindow::getAction() downloadPath: " << downloadPath;
     if(file.exec() != QDialog::Accepted)return;
     auto files = file.selectedFiles();
     if(files.size() > 1) {
