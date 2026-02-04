@@ -2,3 +2,6 @@
 ../.DS_Store
 FTPTransfer-server/.DS_Store
 FTPTransFer-client/.DS_Store
+FTPTransFer-client/*.crt
+FTPTransFer-client/*.key
+FTPTransFer-client/*.srl
