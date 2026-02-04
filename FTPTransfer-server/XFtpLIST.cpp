@@ -72,6 +72,12 @@ void XFtpLIST::Event(bufferevent* bev, short events) {
                 SSL *ssl = bufferevent_openssl_get_ssl(bev);
                 if(ssl && SSL_is_init_finished(ssl)){
                     Logger::info("XFtpLIST::Event() -> SSL ready, starting data transfer");
+                    // 连接建立成功，设置传输阶段的超时
+                    // 列表：类似下载，主要关注写超时
+                    timeval write_timeout = {60, 0};    // 发送目录列表超时60秒
+                    timeval read_timeout = {30, 0};     // 读取超时30秒
+                    bufferevent_set_timeouts(bev, &read_timeout, &write_timeout);
+                    
                     // 开始发送数据
                     bufferevent_trigger(bev, EV_WRITE, 0);
                 }

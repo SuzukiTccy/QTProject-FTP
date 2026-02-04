@@ -172,6 +172,12 @@ void XFtpRETR::Event(bufferevent* bev, short events) {
             SSL* ssl = bufferevent_openssl_get_ssl(bev);
             if(ssl && SSL_is_init_finished(ssl)) {
                 Logger::info("XFtpRETR::Event() -> SSL ready, starting transfer");
+                // 连接建立成功，设置传输阶段的超时
+                // 下载：主要关注写超时（发送数据），读超时可以设置短一些
+                timeval write_timeout = {300, 0};   // 发送数据超时300秒
+                timeval read_timeout = {30, 0};     // 读取响应超时30秒
+                bufferevent_set_timeouts(bev, &read_timeout, &write_timeout);
+
                 bufferevent_trigger(bev, EV_WRITE, 0);
             } else {
                 Logger::info("XFtpRETR::Event() -> SSL handshake in progress");

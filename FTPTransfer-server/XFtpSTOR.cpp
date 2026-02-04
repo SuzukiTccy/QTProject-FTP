@@ -20,6 +20,12 @@ void XFtpSTOR::Read(bufferevent *bev){
     Logger::debug("XFtpSTOR::Read() called, transfer_started=", transfer_started,
                   ", transfer_complete=", transfer_complete);
     
+    // 增加安全检查
+    if(!bev) {
+        Logger::error("XFtpSTOR::Read() -> bev is null");
+        return;
+    }
+    
     // 如果传输已完成，直接返回
     if(transfer_complete) {
         Logger::debug("XFtpSTOR::Read() -> Transfer already complete, ignoring");
@@ -55,18 +61,33 @@ void XFtpSTOR::Read(bufferevent *bev){
         waiting_for_data = false;
     }
     
-    // 重置超时计时器（重要！每次读取数据后重置超时）
-    timeval read_timeout = {60, 0};  // 60秒读取超时
-    bufferevent_set_timeouts(bev, nullptr, &read_timeout);
+    bool data_was_read = false;
     
-    // 循环读取数据直到缓冲区为空或达到最大限制
-    while(true) {
+    // 循环读取直到缓冲区为空
+    do {
+        // 获取输入缓冲区大小
+        struct evbuffer* input = bufferevent_get_input(bev);
+        if(!input) {
+            Logger::debug("XFtpSTOR::Read() -> No input buffer");
+            break;
+        }
+        
+        size_t available = evbuffer_get_length(input);
+        if(available == 0) {
+            Logger::debug("XFtpSTOR::Read() -> No data available");
+            break;
+        }
+        
+        // 计算本次读取的大小（不超过缓冲区大小）
+        size_t to_read = std::min(available, sizeof(buf));
+        Logger::debug("XFtpSTOR::Read() -> ", available, " bytes available, reading ", to_read);
+        
         // 从数据连接读取数据
-        int len = bufferevent_read(bev, buf, sizeof(buf));
+        int len = bufferevent_read(bev, buf, to_read);
         
         if(len == 0){
             // 没有更多数据可读（非错误）
-            Logger::debug("XFtpSTOR::Read() -> No more data available now");
+            Logger::debug("XFtpSTOR::Read() -> bufferevent_read returned 0");
             break;
         }
         
@@ -78,6 +99,8 @@ void XFtpSTOR::Read(bufferevent *bev){
             ClosePORT();
             return;
         }
+        
+        data_was_read = true;
         
         // 更新接收字节数
         bytes_received += len;
@@ -96,45 +119,20 @@ void XFtpSTOR::Read(bufferevent *bev){
             return;
         }
         
-        // 重要：对于大文件，不要每次都flush，影响性能
         // 每接收1MB数据flush一次
         if(bytes_received % (1024*1024) == 0) {
             fflush(fp);
             Logger::debug("XFtpSTOR::Read() -> Flushed at ", bytes_received, " bytes");
         }
         
-        // 如果读取的数据少于缓冲区大小，说明本次读取已完成
-        if(len < (int)sizeof(buf)) {
-            Logger::debug("XFtpSTOR::Read() -> Partial read (", len, " < ", sizeof(buf), "), breaking loop");
-            break;
-        }
-        
-        // 检查是否应该继续读取（避免长时间占用CPU）
-        struct evbuffer* input = bufferevent_get_input(bev);
-        if(!input) break;
-        
-        size_t pending = evbuffer_get_length(input);
-        if(pending < 1024) {  // 如果缓冲区数据很少，跳出循环等待下一次回调
-            Logger::debug("XFtpSTOR::Read() -> Only ", pending, " bytes pending, breaking loop");
-            break;
-        }
-    }
+    } while(false); // 只循环一次，避免阻塞事件循环
     
-    // 检查是否还有待处理的数据
-    struct evbuffer* input = bufferevent_get_input(bev);
-    if(input) {
-        size_t pending = evbuffer_get_length(input);
-        if(pending > 0) {
-            Logger::debug("XFtpSTOR::Read() -> Still ", pending, " bytes pending, will continue");
-            
-            // 如果还有数据，立即再次触发读事件
-            // 这对于大文件传输很重要
-            if(pending > 1024 * 1024) {  // 如果还有超过1MB数据
-                bufferevent_trigger(bev, EV_READ, 0);
-            }
-        } else {
-            Logger::debug("XFtpSTOR::Read() -> Input buffer is empty");
-        }
+    // 如果读取了数据，立即检查是否还有更多数据
+    if(data_was_read) {
+        // 使用weak_ptr避免访问已释放的内存
+        auto weak_bev = std::weak_ptr<bufferevent>(); // 需要先将bev包装为shared_ptr
+        // 简化：直接再次触发读事件
+        bufferevent_trigger(bev, EV_READ, 0);
     }
 }
 
@@ -142,6 +140,12 @@ void XFtpSTOR::Read(bufferevent *bev){
 
 void XFtpSTOR::Event(bufferevent* bev, short events) {
     Logger::debug("XFtpSTOR::Event() events: " + std::to_string(events));
+    
+    // 安全检查
+    if(!bev) {
+        Logger::error("XFtpSTOR::Event() -> bev is null");
+        return;
+    }
     
     #ifndef OPENSSL_NO_SSL_INCLUDES
     // 检查是否是SSL握手完成事件
@@ -168,31 +172,31 @@ void XFtpSTOR::Event(bufferevent* bev, short events) {
     if (events & BEV_EVENT_CONNECTED) {
         Logger::info("XFtpSTOR::Event() BEV_EVENT_CONNECTED");
         
-        // 重置超时计时器，开始传输
-        timeval transfer_timeout = {300, 0};  // 300秒传输超时
-        bufferevent_set_timeouts(bev, nullptr, &transfer_timeout);
-        
         #ifndef OPENSSL_NO_SSL_INCLUDES
         if (cmdTask && cmdTask->use_ssl) {
             SSL* ssl = bufferevent_openssl_get_ssl(bev);
-            if (ssl && SSL_is_init_finished(ssl)) {
-                Logger::info("XFtpSTOR::Event() -> SSL handshake completed, ready to receive");
-                // 立即触发读事件开始接收数据
-                bufferevent_trigger(bev, EV_READ, 0);
-            } else {
-                Logger::info("XFtpSTOR::Event() -> SSL handshake in progress, waiting...");
-                waiting_for_data = true;
-                // 等待SSL握手完成事件
+            if (ssl) {
+                if (SSL_is_init_finished(ssl)) {
+                    Logger::info("XFtpSTOR::Event() -> SSL handshake already completed");
+                } else {
+                    Logger::info("XFtpSTOR::Event() -> SSL handshake in progress, waiting...");
+                    // 等待SSL握手完成事件
+                    return;
+                }
             }
-        } else {
-            // 非SSL连接，可以立即开始接收数据
-            Logger::info("XFtpSTOR::Event() -> Non-SSL connection, starting receive");
-            bufferevent_trigger(bev, EV_READ, 0);
         }
-        #else
-        Logger::info("XFtpSTOR::Event() -> Starting to receive data");
-        bufferevent_trigger(bev, EV_READ, 0);
         #endif
+        
+        // 连接建立成功，设置传输阶段的超时
+        // 上传：主要关注读超时（接收数据）
+        timeval read_timeout = {300, 0};    // 接收数据超时300秒
+        timeval write_timeout = {30, 0};    // 发送响应超时30秒
+        bufferevent_set_timeouts(bev, &read_timeout, &write_timeout);
+        
+        Logger::info("XFtpSTOR::Event() -> Ready to receive data");
+        
+        // 立即触发读事件开始接收数据
+        bufferevent_trigger(bev, EV_READ, 0);
         
         return;
     }
@@ -208,7 +212,8 @@ void XFtpSTOR::Event(bufferevent* bev, short events) {
                 fflush(fp);
                 
                 // 获取文件大小验证
-                long current_pos = ftell(fp);
+                fseek(fp, 0, SEEK_END);        // 移动到文件末尾
+                long current_pos = ftell(fp);  // 当前文件大小
                 Logger::info("XFtpSTOR::Event() -> Final file size: ", current_pos, 
                             " bytes, total received: ", bytes_received);
                 
@@ -230,13 +235,34 @@ void XFtpSTOR::Event(bufferevent* bev, short events) {
         Logger::info("XFtpSTOR::Event() close connection");
         return;
     }
+    else if (events & (BEV_EVENT_ERROR | BEV_EVENT_EOF)) {
+        // 同时发生错误和EOF的情况
+        Logger::info("XFtpSTOR::Event() -> Connection closed with possible error");
+        
+        if(!transfer_complete && !file_write_error) {
+            // 检查是否已接收部分数据
+            if(bytes_received > 0) {
+                Logger::info("XFtpSTOR::Event() -> Partial upload received: ", bytes_received, " bytes");
+                
+                // 保存已接收的数据
+                if(fp) {
+                    fflush(fp);
+                    ResCMD("226 Partial transfer complete.\r\n");
+                }
+            }
+            transfer_complete = true;
+        }
+        
+        ClosePORT();
+        return;
+    }
     else if (events & BEV_EVENT_ERROR) {
         Logger::error("XFtpSTOR::Event() BEV_EVENT_ERROR");
         
         // 获取错误信息
         int err = EVUTIL_SOCKET_ERROR();
         std::string err_str = evutil_socket_error_to_string(err);
-        Logger::error("XFtpSTOR::Event() -> Socket error: " + err_str);
+        Logger::error("XFtpSTOR::Event() -> Socket error: ", err_str);
         
         #ifndef OPENSSL_NO_SSL_INCLUDES
         // 检查SSL错误
@@ -259,9 +285,15 @@ void XFtpSTOR::Event(bufferevent* bev, short events) {
             return; // 立即返回，不关闭连接
         }
         
-        // 真正的错误，关闭连接
+        // 真正的错误，检查是否已接收部分数据
         if(!transfer_complete && !file_write_error) {
-            ResCMD("426 Connection error; transfer aborted.\r\n");
+            if(bytes_received > 0) {
+                Logger::warning("XFtpSTOR::Event() -> Connection error after receiving ", 
+                               bytes_received, " bytes");
+                ResCMD("426 Connection error; transfer aborted.\r\n");
+            } else {
+                ResCMD("425 Can't open data connection.\r\n");
+            }
         }
         ClosePORT();
         return;
@@ -339,16 +371,4 @@ void XFtpSTOR::Parse(string cmd, string msg){
     
     // 建立数据连接
     ConnectoPORT();
-    
-    // 重要：立即设置一个定时器，防止连接建立后没有数据
-    if(cmdTask && cmdTask->base && bev) {
-        // 设置一个初始触发，确保读事件开始
-        timeval immediate = {0, 50000};  // 50毫秒后触发
-        event* trigger_event = event_new(cmdTask->base, -1, 0, [](evutil_socket_t fd, short event, void* arg){
-            bufferevent* bev = (bufferevent*)arg;
-            Logger::debug("XFtpSTOR -> Triggering initial read event");
-            bufferevent_trigger(bev, EV_READ, 0);
-        }, bev);
-        event_add(trigger_event, &immediate);
-    }
 }

@@ -95,7 +95,7 @@ bool XThread::Setup(){
         Logger::error("XThread::Setup() -> Thread_id ", id, ": event_base_new_with_config() error");
         return false;
     }
-
+    // 创建持久化的读事件，用于监听通知管道，EV_PERSIST表示事件触发后不自动删除
     notify_event = event_new(base, notify_recv_fd, EV_READ | EV_PERSIST, Notify_cb, this);
     event_add(notify_event, NULL);
 

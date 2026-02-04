@@ -2,6 +2,7 @@
 #include <event2/bufferevent.h>
 #include "XTask.h"
 #include <string>
+#include <vector>
 using namespace std;
 
 struct bufferevent;
@@ -63,6 +64,20 @@ public:
 
     // 数据连接相关的bufferevent对象（用于文件传输、目录列表等数据操作）
     bufferevent *bev = 0;
+
+        // 添加事件列表，用于管理定时器事件
+    vector<event*> pending_events;
+    
+    // 清理所有待处理事件
+    void ClearPendingEvents() {
+        for(auto ev : pending_events) {
+            if(ev) {
+                event_del(ev);
+                event_free(ev);
+            }
+        }
+        pending_events.clear();
+    }
 
 protected:
     // 静态事件回调函数（libevent C风格回调）

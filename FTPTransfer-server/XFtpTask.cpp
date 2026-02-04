@@ -92,15 +92,8 @@ void XFtpTask::ConnectoPORT(){
 
     Setcb(bev); 
 
-    timeval t = {30, 0};
-    bufferevent_set_timeouts(bev, &t, 0);
-
-    timeval ssl_handshake_timeout = {10, 0};  // 10秒SSL握手超时
-    bufferevent_set_timeouts(bev, &t, &ssl_handshake_timeout);  // 分别设置
-
-    // 对于STOR（上传），设置读写超时
-    timeval transfer_timeout = {300, 0}; // 传输超时300秒（5分钟）
-    bufferevent_set_timeouts(bev, &transfer_timeout, &transfer_timeout);
+    timeval connect_phase_timeout = {30, 0};
+    bufferevent_set_timeouts(bev, &connect_phase_timeout, &connect_phase_timeout);
 
     if(bufferevent_socket_connect(bev, (sockaddr*)&sin, sizeof(sin)) == -1){
         int err = evutil_socket_geterror(bufferevent_getfd(bev));
@@ -121,6 +114,10 @@ void XFtpTask::ConnectoPORT(){
 
 
 void XFtpTask::ClosePORT(){
+
+    // 清理所有待处理事件
+    ClearPendingEvents();
+    
     if(bev){
         // 对于上传，需要确保所有数据都已处理
         struct evbuffer* input = bufferevent_get_input(bev);
