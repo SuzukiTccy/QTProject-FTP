@@ -5,7 +5,9 @@
             "includePath": [
                 "${workspaceFolder}/**",
                 "/opt/homebrew/opt/libevent/include/**",
-                "/opt/homebrew/opt/libevent/include/event2/**"
+                "/opt/homebrew/opt/libevent/include/event2/**",
+                "/opt/homebrew/opt/openssl/include/**",
+                "/opt/homebrew/opt/openssl/include/openssl/**"
             ],
             "defines": [],
             "compilerPath": "/usr/bin/clang++"

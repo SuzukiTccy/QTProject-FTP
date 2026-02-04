@@ -6,6 +6,7 @@ CCMODE = PROGRAM
 
 # 包含路径（macOS Homebrew安装的libevent）
 INCLUDES = -I/opt/homebrew/opt/libevent/include
+INCLUDES += -I/opt/homebrew/opt/openssl/include
 
 # 编译标志
 CFLAGS = -Wall -std=c++17 -O2
@@ -17,7 +18,9 @@ TARGET = ftpSrv
 SRCS := $(wildcard *.cpp)
 
 # 链接库
-LIBS = -L/opt/homebrew/opt/libevent/lib -levent -lpthread
+LIBS = -L/opt/homebrew/opt/libevent/lib -L/opt/homebrew/opt/openssl/lib
+LIBS += -levent -lpthread -lcrypto
+LIBS += -levent_openssl -levent_core -levent_extra -lssl
 
 # 主构建规则（可执行程序）
 ifeq ($(CCMODE), PROGRAM)

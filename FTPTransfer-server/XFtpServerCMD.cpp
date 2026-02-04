@@ -69,75 +69,86 @@ void XFtpServerCMD::Event(bufferevent *bev, short events){
 
 void XFtpServerCMD::Read(bufferevent *bev){
     cout << endl;
-    Logger::debug("XFtpServerCMD::Read()");
+    Logger::debug("XFtpServerCMD::Read() called");
  
     char buf[BUFS] = {0};
     
-    // 1. 一次性读取所有数据
-    int total_len = bufferevent_read(bev, buf, BUFS);
-    if(total_len <= 0){
-        if(total_len == 0){
+    // 1. 读取新数据
+    int len = bufferevent_read(bev, buf, BUFS);
+    if(len <= 0){
+        if(len == 0){
             Logger::info("XFtpServerCMD::Read() -> bufferevent_read EOF");
         }
-        else if(total_len < 0){
+        else {
             perror("XFtpServerCMD::Read() -> bufferevent_read failed");
         }
         return;
     }
     
-    // 2. 按行分割并处理
-    int pos = 0;  // 当前处理位置
-    while(pos < total_len){
-        // 2.1 查找命令结束符 \r\n
-        int cmd_end = pos;
-        while(cmd_end < total_len && 
-              !(buf[cmd_end] == '\r' && cmd_end+1 < total_len && buf[cmd_end+1] == '\n')){
-            cmd_end++;
-        }
+    // 2. 将新数据追加到累积缓冲区
+    read_buffer.append(buf, len);
+    Logger::debug("XFtpServerCMD::Read() -> Appended ", len, " bytes to buffer. Buffer now (raw): \"", 
+                    read_buffer, "\"");
+    
+    // 3. 循环处理缓冲区中所有完整的命令（以\r\n结尾）
+    size_t start_pos = 0;
+    while (true) {
+        // 3.1 查找命令结束符 \r\n
+        size_t crlf_pos = read_buffer.find("\r\n", start_pos);
+        Logger::debug("XFtpServerCMD::Read() -> Looking for \\r\\n from pos ", start_pos, ", found at: ", 
+                     (crlf_pos == std::string::npos ? "npos" : std::to_string(crlf_pos)));
         
-        // 2.2 如果没有找到完整命令，跳出循环
-        if(cmd_end >= total_len || buf[cmd_end] != '\r'){
-            Logger::debug("XFtpServerCMD::Read() -> Incomplete command, waiting for more data");
+        if (crlf_pos == std::string::npos) {
+            // 没有找到完整的命令，跳出循环
             break;
         }
         
-        // 2.3 提取单条命令（不包括\r\n）
-        string cmd_line(buf + pos, cmd_end - pos);
-        Logger::debug("XFtpServerCMD::Read() -> Processing command line: ", cmd_line);
+        // 3.2 提取一条完整命令（不包括\r\n）
+        std::string cmd_line = read_buffer.substr(start_pos, crlf_pos - start_pos);
+        Logger::debug("XFtpServerCMD::Read() -> Processing command line: \"", cmd_line, "\"");
         
-        // 2.4 解析命令类型
-        string type = "";
-        for(size_t i = 0; i < cmd_line.size(); ++i){
-            if(cmd_line[i] == ' ' || cmd_line[i] == '\t') break;
+        // 3.3 解析命令类型
+        std::string type;
+        for (size_t i = 0; i < cmd_line.size(); ++i) {
+            if (cmd_line[i] == ' ' || cmd_line[i] == '\t') break;
             type += cmd_line[i];
         }
-        transform(type.begin(), type.end(), type.begin(), ::toupper);
+        std::transform(type.begin(), type.end(), type.begin(), ::toupper);
         Logger::info("XFtpServerCMD::Read() -> Recv CMD: ", type);
         
-        // 2.5 处理命令
-        if (calls_map.find(type) != calls_map.end()){
-            XFtpTask *t = calls_map[type];
-            if(cmd_line.find('\r') == string::npos){
-                cmd_line += "\r\n";
-            }
-            t->Parse(type, cmd_line);  // 传递完整的命令行
-            Logger::info("XFtpServerCMD::Read() -> curDir : ", curDir);
-            // 注意：不要在这里发送通用响应，让每个命令自己发送响应
-        }
-        else{
+        // 3.4 处理命令
+        auto it = calls_map.find(type);
+        if (it != calls_map.end()) {
+            XFtpTask *t = it->second;
+            Logger::debug("XFtpServerCMD::Read() -> Found handler for command: ", type);
+            // 确保传递完整的FTP格式
+            t->Parse(type, cmd_line + "\r\n");
+            Logger::info("XFtpServerCMD::Read() -> curDir: ", curDir);
+        } else {
             ResCMD("500 Command not understood\r\n");
-            Logger::warning("XFtpServerCMD::Read() -> Unknown CMD: ", type);
+            Logger::warning("XFtpServerCMD::Read() -> Unknown CMD: ", type, ", available commands: ");
+            // 打印所有可用命令以便调试
+            for (const auto& pair : calls_map) {
+                Logger::warning("  - ", pair.first);
+            }
         }
         
-        // 2.6 移动到下一命令（跳过\r\n）
-        pos = cmd_end + 2;  // \r\n 占2个字节
+        // 3.5 移动到下一条命令的开始位置（跳过\r\n）
+        start_pos = crlf_pos + 2;
+        Logger::debug("XFtpServerCMD::Read() -> Moving start_pos to: ", start_pos);
     }
     
-    // 3. 检查是否有剩余数据（不完整的命令）
-    if(pos < total_len){
-        Logger::debug("XFtpServerCMD::Read() -> Remaining data: ", string(buf+pos, total_len-pos));
-        // 注意：这里应该保存剩余数据，下次读取时合并
-        // 但为了简化，我们先不处理
+    // 4. 处理完成后，清理已处理的数据
+    if (start_pos > 0) {
+        read_buffer.erase(0, start_pos);
+        Logger::debug("XFtpServerCMD::Read() -> Cleared processed data. Remaining buffer: \"", 
+                      read_buffer, "\"");
+    }
+    
+    // 5. 可选：设置缓冲区大小上限，防止异常情况
+    if (read_buffer.size() > BUFS * 4) {
+        Logger::error("XFtpServerCMD::Read() -> Read buffer too large, possible protocol error. Clearing.");
+        read_buffer.clear();
     }
 }
 

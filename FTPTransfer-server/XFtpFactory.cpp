@@ -7,6 +7,9 @@
 #include "XFtpSTOR.h"
 #include "XFtpPASS.h"
 #include "XFtpTYPE.h"
+#include "XFtpAUTH.h"
+#include "XFtpPBSZ.h"
+#include "XFtpPROT.h"
 #include "testUtil.h"
 #include <memory>           // 智能指针
 
@@ -27,6 +30,12 @@ std::shared_ptr<XFtpServerCMD> XFtpFactory::CreateTask(){
     cmd->Reg("PWD", xftplist);
     cmd->Reg("CWD", xftplist);
     cmd->Reg("CDUP", xftplist);
+
+    #ifndef OPENSSL_NO_SSL_INCLUDES
+    cmd->Reg("AUTH", new XFtpAUTH());
+    cmd->Reg("PBSZ", new XFtpPBSZ());
+    cmd->Reg("PROT", new XFtpPROT());
+    #endif
 
     return cmd;
 }

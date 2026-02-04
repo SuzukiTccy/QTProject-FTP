@@ -61,6 +61,9 @@ public:
     // 析构函数（清理资源）
     virtual ~XFtpTask();
 
+    // 数据连接相关的bufferevent对象（用于文件传输、目录列表等数据操作）
+    bufferevent *bev = 0;
+
 protected:
     // 静态事件回调函数（libevent C风格回调）
     // 参数：bev-触发事件的bufferevent，what-事件类型，arg-用户数据（指向XFtpTask对象）
@@ -73,9 +76,6 @@ protected:
     // 静态写回调函数（libevent C风格回调）
     // 参数：bev-触发写事件的bufferevent，arg-用户数据（指向XFtpTask对象）
     static void WriteCB(bufferevent *bev, void *arg);
-
-    // 数据连接相关的bufferevent对象（用于文件传输、目录列表等数据操作）
-    bufferevent *bev = 0;
 
     // 文件指针（用于文件上传/下载操作时打开的文件）
     FILE *fp = 0;

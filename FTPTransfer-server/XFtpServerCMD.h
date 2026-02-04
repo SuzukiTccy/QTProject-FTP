@@ -24,4 +24,5 @@ public:
 private:
     std::map<std::string, XFtpTask*> calls_map;  // 命令注册表
     // std::map<XFtpTask*, int> callsDel_map;    // 任务删除标记表
+    std::string read_buffer; // 新增：用于累积未处理完的数据
 };

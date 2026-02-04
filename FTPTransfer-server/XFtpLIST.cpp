@@ -4,71 +4,171 @@
 #include <event2/buffer.h>
 #include <sys/stat.h> 
 #include "testUtil.h"
+
+// OpenSSL相关头文件
+#ifndef OPENSSL_NO_SSL_INCLUDES
+#include <openssl/ssl.h>               // SSL核心库
+#include <openssl/err.h>               // SSL错误处理库
+#include <event2/bufferevent_ssl.h>    // libevent与OpenSSL集成的缓冲事件
+extern SSL_CTX *ssl_ctx;               // 声明外部SSL上下文变量
+#endif
+
 using namespace std;
 
 
 
 void XFtpLIST::Write(bufferevent* bev) {
     Logger::debug("XFtpLIST::Write()");
-
-    // 发送目录列表数据
-    int result = Send(listdata);
-    if(result <= 0){
-        if(result == 0){
-            Logger::info("XFtpLIST::Write() Send complete");
-            ResCMD("226 Transfer complete\r\n");
+    
+    static bool data_queued = false;
+    
+    if(!data_queued) {
+        // 第一次：发送数据
+        int result = Send(listdata);
+        if(result <= 0){
+            if(result == 0){
+                Logger::info("XFtpLIST::Write() -> Data queued for sending");
+                data_queued = true;
+                
+                // 关键：不要在这里发送 226
+                // 等待下一次 Write() 回调来检查缓冲区
+            }
+            else{
+                Logger::error("XFtpLIST::Parse() Send failed");
+                ResCMD("426 Connection closed; transfer aborted.\r\n");
+                ClosePORT();
+            }
         }
-        else{
-            Logger::error("XFtpLIST::Parse() Send failed");
-            ResCMD("426 Connection closed; transfer aborted.\r\n");
-        }
-        ClosePORT();
         return;
     }
     
-    // 检查输出缓冲区是否还有数据
+    // 数据已经排队，检查缓冲区
     struct evbuffer* output = bufferevent_get_output(bev);
     if (evbuffer_get_length(output) == 0) {
-        // 所有数据已发送完成
+        // 缓冲区已空，传输完成
+        Logger::info("XFtpLIST::Write() -> Buffer empty, transfer complete");
         ResCMD("226 Transfer complete\r\n");
         ClosePORT();
+        data_queued = false; // 重置状态
         Logger::info("XFtpLIST::Write() close connection");
     } else {
-        // 还有数据待发送，继续等待下一次Write回调
-        Logger::debug("XFtpLIST::Write() data remaining, continue sending");
+        // 缓冲区还有数据，继续等待
+        Logger::debug("XFtpLIST::Write() -> ", evbuffer_get_length(output), 
+                     " bytes remaining in buffer");
     }
 }
 
 
 void XFtpLIST::Event(bufferevent* bev, short events) {
     Logger::debug("XFtpLIST::Event() events: " + std::to_string(events));
-    
+    // 检查是否是连接建立和错误同时发生
+    #ifndef OPENSSL_NO_SSL_INCLUDES
+        // 检查是否是SSL握手完成事件
+        if (events & 0x4000) { // libevent的BEV_EVENT_SSL_READY标志
+            Logger::info("XFtpLIST::Event() -> SSL handshake completed on data connection");
+            
+            // 检查SSL状态
+            if(cmdTask && cmdTask->use_ssl){
+                SSL *ssl = bufferevent_openssl_get_ssl(bev);
+                if(ssl && SSL_is_init_finished(ssl)){
+                    Logger::info("XFtpLIST::Event() -> SSL ready, starting data transfer");
+                    // 开始发送数据
+                    bufferevent_trigger(bev, EV_WRITE, 0);
+                }
+            }
+            return;
+        }
+    #endif
+
     if (events & BEV_EVENT_CONNECTED) {
         Logger::info("XFtpLIST::Event() BEV_EVENT_CONNECTED");
-        // 连接建立，可以开始发送数据（如果还没有开始的话）
-        bufferevent_trigger(bev, EV_WRITE, 0);
+        // 检查SSL握手是否完成（对于SSL连接）
+        #ifndef OPENSSL_NO_SSL_INCLUDES
+            if(events & BEV_EVENT_ERROR){
+                Logger::info("XFtpLIST::Event() -> CONNECTED+ERROR (likely SSL handshake in progress)");
+        
+                // TCP连接已建立，但SSL握手可能还在进行或有临时错误
+                int err = EVUTIL_SOCKET_ERROR();
+                if (err == EINPROGRESS || err == EAGAIN) {
+                    Logger::info("XFtpLIST::Event() -> SSL handshake in progress, waiting...");
+                    
+                    // 等待SSL握手完成，不要触发写入
+                    // SSL握手成功后会再次触发事件
+                    return;
+                }
+            }
+            if (cmdTask && cmdTask->use_ssl) {
+                SSL* ssl = bufferevent_openssl_get_ssl(bev);
+                if (ssl && SSL_is_init_finished(ssl)) {
+                    Logger::info("XFtpLIST::Event() -> SSL handshake completed, triggering write");
+                    bufferevent_trigger(bev, EV_WRITE, 0);
+                } else {
+                    Logger::info("XFtpLIST::Event() -> SSL handshake in progress, waiting...");
+                    // SSL握手未完成，等待握手完成事件
+                    // 打印SSL错误队列
+                    unsigned long ssl_err;
+                    while ((ssl_err = ERR_get_error()) != 0) {
+                        char err_buf[256];
+                        ERR_error_string_n(ssl_err, err_buf, sizeof(err_buf));
+                        Logger::error("SSL Error: " + std::string(err_buf));
+                    }
+                }
+            } else {
+                // 非SSL连接，直接开始发送数据
+                bufferevent_trigger(bev, EV_WRITE, 0);
+            }
+        #else
+            bufferevent_trigger(bev, EV_WRITE, 0);
+        #endif
+        return;
+    }
+    else if (events & BEV_EVENT_ERROR) {
+        Logger::error("XFtpLIST::Event() BEV_EVENT_ERROR");
+        
+        // 获取错误信息
+        int err = EVUTIL_SOCKET_ERROR();
+        std::string err_str = evutil_socket_error_to_string(err);
+        Logger::error("XFtpLIST::Event() -> Socket error: " + err_str);
+        
+        // 关键修正：正确检查 EINPROGRESS
+        // 比较错误码
+        if (err == EINPROGRESS) {
+            Logger::info("XFtpLIST::Event() -> EINPROGRESS detected (via errno), this is normal. Waiting...");
+            return; // ✅ 立即返回，不关闭连接！
+        }
+        
+        if (err == EAGAIN) {
+            Logger::info("XFtpLIST::Event() -> EAGAIN detected, this is normal. Waiting...");
+            return; // ✅ 立即返回，不关闭连接！
+        }
+        
+        // 如果是真正的错误，才关闭连接
+        Logger::error("XFtpLIST::Event() -> Real connection error, closing.");
+        ClosePORT();
+        Logger::info("XFtpLIST::Event() close connection");
         return;
     }
     else if (events & BEV_EVENT_EOF) {
         Logger::info("XFtpLIST::Event() BEV_EVENT_EOF");
-        // 对方关闭了连接，我们也要关闭连接
-    }
-    else if (events & BEV_EVENT_ERROR) {
-        Logger::error("XFtpLIST::Event() BEV_EVENT_ERROR");
-        // 发生错误，关闭连接
-        // 获取并打印错误信息
-        int err = EVUTIL_SOCKET_ERROR();
-        Logger::error("XFtpLIST::Event() -> Socket error: " + std::string(evutil_socket_error_to_string(err)));
+        ClosePORT();
+        Logger::info("XFtpLIST::Event() close connection");
     }
     else if (events & BEV_EVENT_TIMEOUT) {
         Logger::info("XFtpLIST::Event() BEV_EVENT_TIMEOUT");
-        // 超时，关闭连接
+        ClosePORT();
+        Logger::info("XFtpLIST::Event() close connection");
     }
-    // 其他事件，暂时忽略
-
-    // 关闭连接
-    ClosePORT();
-    Logger::info("XFtpLIST::Event() close connection");
+    #ifndef OPENSSL_NO_SSL_INCLUDES
+        else if (events & 0x4000) { // 有些libevent版本用这个标志表示SSL握手完成
+            Logger::info("XFtpLIST::Event() -> SSL handshake completed event");
+            if (listdata.empty()) {
+                Logger::debug("XFtpLIST::Event() -> No data to send yet");
+            } else {
+                bufferevent_trigger(bev, EV_WRITE, 0);
+            }
+        }
+    #endif
+    // 其他事件暂时忽略
 }
 
 
