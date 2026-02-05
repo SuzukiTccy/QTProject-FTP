@@ -70,6 +70,7 @@ MainWindow::MainWindow(QWidget *parent)
     , ui_connect_status("  就绪")
     , ui_pwd("  当前路径：/")
     , ui_cur_time(cur_time())
+    , ui_ssl_status("  SSL: 关闭")  // 新增
 {
     ui->setupUi(this);
 
@@ -95,6 +96,11 @@ MainWindow::MainWindow(QWidget *parent)
 
     connect(ui->action_connect, &QAction::triggered, this, &MainWindow::onConnect);
     connect(ui->list_file,&QTableWidget::cellDoubleClicked,this,&MainWindow::cellDoubleClicked);
+
+    connect(&ftp, &Ftp::errorOccurred, this, &MainWindow::onFtpError);
+    connect(&ftp, &Ftp::sslStatusChanged, this, &MainWindow::onFtpSSLStatusChanged);
+
+    qInfoTime() << "MainWindow::MainWindow() -> finished";
 
 }
 
@@ -175,18 +181,35 @@ void MainWindow::insert_item(int row,int idx,QString item)
 
 void MainWindow::onConnect()
 {
-    FtpConnectDlg dlg;
+    FtpConnectDlg dlg(this);
     if(dlg.exec() != QDialog::Accepted) return;
-    if(!ftp.login(dlg.ftp_data())){
-        QMessageBox::warning(this, u8"连接失败", u8"连接失败", QMessageBox::Ok);
+
+    FTP_DATA data = dlg.ftp_data();
+    // 显示连接状态
+    ui_connect_status.setText("正在连接 " + data.host + " (SSL:" + (data.useSSL ? "是" : "否") + ")...");
+
+    if(!ftp.login(data)){
+        QMessageBox::warning(this, u8"连接失败", u8"连接失败" + ftp.error(), QMessageBox::Ok);
+        ui_connect_status.setText("连接失败");
         qWarningTime() << ftp.error();
         return;
     }
-    ui_connect_status.setText("连接成功：" + dlg.ftp_data().host);
+    ui_connect_status.setText("连接成功：" + data.host +
+                              (data.useSSL ? " (SSL加密)" : " (非加密)"));
 
     clear_ui_list();         // 清空表格内容
     set_pwd();               // 设置当前路径
-    insert_list(ftp.dir());  // 插入文件列表内容
+
+
+    // 尝试获取目录列表，如果失败可能是SSL数据连接问题
+    auto list = ftp.dir();
+    if(list.empty()) {
+        QMessageBox::warning(this, u8"警告",
+                             u8"获取目录列表可能失败，SSL数据连接可能有问题",
+                             QMessageBox::Ok);
+    }
+
+    insert_list(list);  // 插入文件列表内容
 }
 
 
@@ -350,4 +373,15 @@ QString MainWindow::get_file_name(int row)
     }
 
     return fileName;
+}
+
+// 新增槽函数实现
+void MainWindow::onFtpError(const QString& error)
+{
+    QMessageBox::warning(this, "FTP错误", error, QMessageBox::Ok);
+}
+
+void MainWindow::onFtpSSLStatusChanged(bool enabled)
+{
+    ui_ssl_status.setText(enabled ? "  SSL: 已启用" : "  SSL: 未启用");
 }

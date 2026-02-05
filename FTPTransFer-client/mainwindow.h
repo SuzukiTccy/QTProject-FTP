@@ -53,6 +53,8 @@ public slots:
     void getAction();
     void delAction();
 
+    void onFtpError(const QString& error);
+    void onFtpSSLStatusChanged(bool enabled);
 private:
     QString get_file_name(int row);
     void set_pwd();
@@ -68,5 +70,6 @@ private:
     QLabel ui_cur_time;       // 当前时间
     int timerId;              // 定时器ID
     Ftp ftp;
+    QLabel ui_ssl_status;     // SSL状态显示
 };
 #endif // MAINWINDOW_H

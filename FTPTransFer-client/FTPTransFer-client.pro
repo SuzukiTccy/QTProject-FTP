@@ -35,7 +35,7 @@ qnx: target.path = /tmp/$${TARGET}/bin
 else: unix:!android: target.path = /opt/$${TARGET}/bin
 !isEmpty(target.path): INSTALLS += target
 
-QMAKE_MACOSX_DEPLOYMENT_TARGET = 15.0
+QMAKE_MACOSX_DEPLOYMENT_TARGET = 26.0
 
 # INCLUDEPATH += $$PWD/ftplib/include
 # DEPENDPATH += $$PWD/ftplib/include
