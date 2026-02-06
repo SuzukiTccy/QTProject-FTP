@@ -26,6 +26,7 @@ FtpConnectDlg::FtpConnectDlg(QWidget *parent) :
 
 FtpConnectDlg::~FtpConnectDlg()
 {
+    qInfoTime() << "FtpConnectDlg::~FtpConnectDlg() called";
     delete ui;
 }
 

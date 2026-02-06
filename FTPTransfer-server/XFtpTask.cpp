@@ -173,7 +173,7 @@ int XFtpTask::Send(const char* data, size_t datasize){
         ResCMD("426 Connection closed; transfer aborted.");
         ClosePORT();
     }
-    Logger::info("XFtpTask::Send() data: ", data);
+    // Logger::debug("XFtpTask::Send() data: ", data); // 打印发送的数据
     return result;
 }
 

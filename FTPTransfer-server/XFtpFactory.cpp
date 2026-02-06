@@ -10,6 +10,8 @@
 #include "XFtpAUTH.h"
 #include "XFtpPBSZ.h"
 #include "XFtpPROT.h"
+#include "XFtpREST.h"
+#include "XFtpSIZE.h"
 #include "testUtil.h"
 #include <memory>           // 智能指针
 
@@ -31,11 +33,16 @@ std::shared_ptr<XFtpServerCMD> XFtpFactory::CreateTask(){
     cmd->Reg("CWD", xftplist);
     cmd->Reg("CDUP", xftplist);
 
+    // SSL相关命令注册
     #ifndef OPENSSL_NO_SSL_INCLUDES
     cmd->Reg("AUTH", new XFtpAUTH());
     cmd->Reg("PBSZ", new XFtpPBSZ());
     cmd->Reg("PROT", new XFtpPROT());
     #endif
+
+    // 断点续传命令注册
+    cmd->Reg("REST", new XFtpREST());
+    cmd->Reg("SIZE", new XFtpSIZE());
 
     return cmd;
 }

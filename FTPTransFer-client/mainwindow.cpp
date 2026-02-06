@@ -91,7 +91,7 @@ MainWindow::MainWindow(QWidget *parent)
     connect(ui->action_exit, &QAction::triggered, this, [this](){
         qDebug() << "action_exit";
         if(QMessageBox::question(this, this->windowTitle(), "你确定要退出吗？") != QMessageBox::Yes) return;
-        exit(0);
+        this->close();  // 关闭主窗口
     });
 
     connect(ui->action_connect, &QAction::triggered, this, &MainWindow::onConnect);
@@ -124,7 +124,7 @@ void MainWindow::timerEvent(QTimerEvent *e)
 
 void MainWindow::closeEvent(QCloseEvent *e)
 {
-    qDebug() << "closeEvent";
+    qDebug() << "MainWindow::closeEvent() called";
     if(QMessageBox::question(this,this->windowTitle(),"你确定要退出吗？") == QMessageBox::Yes)return;
     e->ignore();
 }

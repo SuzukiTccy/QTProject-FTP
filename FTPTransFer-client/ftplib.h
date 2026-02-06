@@ -214,7 +214,7 @@ private:
   int readline(char *buf,int max,ftphandle *ctl);
   int writeline(char *buf, int len, ftphandle *nData);
   int readresp(char c, ftphandle *nControl);
-  void sprint_rest(char *buf, off64_t offset);
+  void sprint_rest(char *buf, int buf_size, off64_t offset);
   void ClearHandle();
   int CorrectPasvResponse(unsigned char *v);
 };

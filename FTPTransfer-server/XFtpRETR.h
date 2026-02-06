@@ -10,7 +10,7 @@ public:
 
     bool Init() {return true;};         // 初始化（空实现）
 
-        // 重置传输状态
+    // 重置传输状态
     void ResetTransferState() {
         transfer_started = false;
         transfer_complete = false;
@@ -26,4 +26,5 @@ private:
     bool file_eof = false;               // 文件已读到末尾
     bool file_read_error = false;        // 文件读取错误
     long file_pos = 0;                   // 文件读取位置（用于调试）
+    long file_size = 0;               // 文件大小（用于调试）
 };

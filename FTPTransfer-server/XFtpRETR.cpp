@@ -80,7 +80,7 @@ void XFtpRETR::Write(bufferevent *bev){
 
     // 从文件读取数据（1MB块）
     int len = fread(buf, 1, sizeof(buf), fp);
-    file_pos += len;
+    file_pos += len;    // 更新文件读取位置
     Logger::debug("XFtpRETR::Write() -> Read ", len, " bytes from file, total: ", file_pos);
 
     // 处理读取结果
@@ -161,6 +161,7 @@ void XFtpRETR::Write(bufferevent *bev){
 
 
 
+
 void XFtpRETR::Event(bufferevent* bev, short events) {
     Logger::debug("XFtpRETR::Event() events: " + std::to_string(events));
     
@@ -197,6 +198,13 @@ void XFtpRETR::Event(bufferevent* bev, short events) {
             Logger::warning("XFtpRETR::Event() -> Unexpected EOF before transfer complete");
             ResCMD("426 Connection closed unexpectedly.\r\n");
         }
+
+        // 传输完成，重置偏移量
+        if (cmdTask) {
+            cmdTask->SetFileOffset(0);
+            Logger::debug("XFtpRETR::Event() -> Reset file offset to 0");
+        }
+
         ClosePORT();
     }
     else if (events & BEV_EVENT_ERROR) {
@@ -209,8 +217,6 @@ void XFtpRETR::Event(bufferevent* bev, short events) {
     }
     // 其他事件暂时忽略
 }
-
-
 
 
 void XFtpRETR::Parse(string cmd, string msg){
@@ -228,9 +234,13 @@ void XFtpRETR::Parse(string cmd, string msg){
 
     // 2. 构建完整文件路径
     string path = cmdTask->rootDir + cmdTask->curDir + filename;
-    Logger::debug("XFtpRETR::Parse() path: ", path);
+    Logger::info("XFtpRETR::Parse() -> path: ", path);
 
-    // 3. 打开文件（二进制读取模式）
+    // 3. 获取偏移量
+    off_t offset = cmdTask->GetFileOffset();
+    Logger::info("XFtpRETR::Parse() -> Starting download from offset: ", offset);
+
+    // 4. 打开文件（二进制读取模式）
     fp = fopen(path.c_str(), "rb");  // 二进制流式传输
     if (!fp) {
         // 检查具体错误类型
@@ -246,7 +256,38 @@ void XFtpRETR::Parse(string cmd, string msg){
         return;
     }
 
-    // 4. 发送开始传输响应
+    // 6. 获取文件大小
+    fseeko(fp, 0, SEEK_END);        // 移动到文件末尾
+    off_t totalSize = ftello(fp);   // 获取文件大小
+    Logger::info("XFtpRETR::Parse() -> File size: ", totalSize, " bytes");
+
+    file_size = totalSize;          // 保存文件大小用于调试
+
+    // 7. 偏移量处理
+    if (offset > 0) {   // 续传，移动文件指针到指定偏移位置
+        if(fseeko(fp, offset, SEEK_SET) != 0) { // 使用fseeko支持大文件，SEEK_SET表示从文件开头偏移，成功返回 0，失败返回 -1
+            Logger::error("XFtpRETR::Parse() -> fseeko64 failed, offset: ", offset, \
+                            " error: ", strerror(errno));
+            ResCMD("550 Cannot seek to specified offset.\r\n");
+            fclose(fp);
+            fp = nullptr;
+            return;
+        }
+        file_pos = offset; // 更新当前文件位置
+        Logger::info("XFtpRETR::Parse() -> File pointer moved to offset: ", offset);
+    }
+    else if(offset == 0){
+        if(fseeko(fp, 0, SEEK_SET) != 0) {  // 因为前面获取大小时已经移动到文件末尾了，所以这里需要重新移动到文件开头
+            Logger::error("XFtpRETR::Parse() -> fseeko64 failed, offset: 0, error: ", strerror(errno));
+            ResCMD("550 Cannot seek to start of file.\r\n");
+            fclose(fp);
+            fp = nullptr;
+            return;
+        }
+    }
+
+    // 8. 发送开始传输响应
+    // ResCMD("350 Restarting at " + to_string(offset) + " Bytes. Send STORE or RETRIEVE to initiate transfer.\r\n");
     ResCMD("150 File status okay; about to open data connection.\r\n");
     transfer_complete = false;
     // 5. 建立数据连接

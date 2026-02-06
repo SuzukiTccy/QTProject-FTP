@@ -5,6 +5,7 @@
 #include <event2/buffer.h>
 #include <iostream>
 #include <string>
+#include <sys/stat.h>               // for stat()
 
 // OpenSSL相关头文件
 #ifndef OPENSSL_NO_SSL_INCLUDES
@@ -230,6 +231,12 @@ void XFtpSTOR::Event(bufferevent* bev, short events) {
         } else if(file_write_error) {
             ResCMD("550 File write error.\r\n");
         }
+
+        // 传输完成，重置偏移量
+        if (cmdTask) {
+            cmdTask->SetFileOffset(0);
+            Logger::debug("XFtpRETR::Event() -> Reset file offset to 0");
+        }
         
         ClosePORT();
         Logger::info("XFtpSTOR::Event() close connection");
@@ -343,9 +350,57 @@ void XFtpSTOR::Parse(string cmd, string msg){
     // 2. 构建完整文件路径
     string path = cmdTask->rootDir + cmdTask->curDir + filename;
     Logger::info("XFtpSTOR::Parse() path: ", path);
+
+    // 3. 获取偏移量
+    off_t offset = cmdTask->GetFileOffset();
+    Logger::info("XFtpSTOR::Parse() -> Starting upload with offset: ", offset);
+
+    // 4. 检查文件是否存在及其大小
+    struct stat fileStat;
+    bool fileExists = (stat(path.c_str(), &fileStat) == 0);
+    off_t existingSize = fileExists ? fileStat.st_size : 0;
+    if(fileExists){
+        if(offset != existingSize){
+            Logger::warning("XFtpSTOR::Parse() -> Offset ", offset, \
+                " does not match existing file size ", existingSize, \
+                " for file", path, \
+                ". Rejecting upload.");
+            // 根据RFC 959，如果偏移量大于文件大小，应该返回错误
+            ResCMD("554 Requested offset exceeds file size.\r\n");
+            return;
+        } else {
+            Logger::info("XFtpSTOR::Parse() -> Existing file size: ", existingSize, " bytes");
+        }
+    }
     
-    // 3. 以二进制写模式打开文件
-    fp = fopen(path.c_str(), "wb");  // 二进制流式传输
+    // 5. 以二进制写模式打开文件
+    if (offset == 0) {
+        // 从头开始，创建新文件或覆盖
+        fp = fopen(path.c_str(), "wb");  // 二进制写入模式
+    } else {
+        // 续传，以读写模式打开
+        fp = fopen(path.c_str(), "rb+");  // 二进制读写模式
+        
+        if (fp) {
+            // 移动到偏移位置
+            if (fseeko(fp, offset, SEEK_SET) != 0) {
+                Logger::error("XFtpSTOR::Parse() -> fseeko64 failed, offset: ", offset, " error: ", strerror(errno));
+                ResCMD("550 Cannot seek to specified offset.\r\n");
+                fclose(fp);
+                fp = nullptr;
+                return;
+            }
+            bytes_received = offset; // 更新已接收字节数为偏移量
+            Logger::info("XFtpSTOR::Parse() -> File pointer moved to offset: ", offset);
+        } else {
+            // 如果文件不存在但offset>0，返回错误
+            if (offset > 0) {
+                Logger::error("XFtpSTOR::Parse() -> File does not exist for resume, offset: ", offset);
+                ResCMD("550 File does not exist for resume.\r\n");
+                return;
+            }
+        }
+    }
     if(!fp){
         int err = errno;
         string error_msg;
@@ -365,7 +420,7 @@ void XFtpSTOR::Parse(string cmd, string msg){
         return;
     }
 
-    // 4. 发送响应及建立数据连接
+    // 6. 发送响应及建立数据连接
     Logger::info("XFtpSTOR::Parse() -> Ready to receive file upload");
     ResCMD("150 Opening data connection for file transfer.\r\n");
     

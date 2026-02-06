@@ -141,9 +141,9 @@ ftplib::~ftplib()
 	free(mp_ftphandle);
 }
 
-void ftplib::sprint_rest(char *buf, off64_t offset) {
+void ftplib::sprint_rest(char *buf, int buf_size, off64_t offset) {
 #if defined(__APPLE__)
-        snprintf(buf, sizeof(buf),"REST %lld",offset);
+        snprintf(buf, buf_size,"REST %lld",offset);
 #else
         snprintf(buf, sizeof(buf),"REST %ld",offset);
 #endif
@@ -798,7 +798,7 @@ int ftplib::FtpOpenPort(ftphandle *nControl, ftphandle **nData, transfermode mod
 	if (mp_ftphandle->offset != 0)
 	{
 	char buf[256];
-  sprint_rest(buf, mp_ftphandle->offset);
+  sprint_rest(buf, 256, mp_ftphandle->offset);
 	if (!FtpSendCmd(buf,'3',nControl))
 	{
 		net_close(sData);
@@ -902,7 +902,7 @@ int ftplib::FtpOpenPasv(ftphandle *nControl, ftphandle **nData, transfermode mod
 	if (mp_ftphandle->offset != 0)
 	{
 		char buf[256];
-    sprint_rest(buf, mp_ftphandle->offset);
+    sprint_rest(buf, 256, mp_ftphandle->offset);
 		if (!FtpSendCmd(buf,'3',nControl)) return 0;
 	}
 
