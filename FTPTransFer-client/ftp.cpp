@@ -227,6 +227,23 @@ std::vector<FTP_FILE_INFO> Ftp::dir()
         for(int i{9}; i < args.size(); i++)
             file_name += " " + args[i];
 
+        QString size_str = args[4];
+        float size = size_str.toFloat();
+        QString type = "";
+        if(size < 1000){                // 小于1KB
+            type = "B";
+        }
+        else if(size < (1000 * 1000)){  // 小于1MB
+            size /= 1024;               // 用KB显示
+            type = "KB";
+        }
+        else{                           // 大于等于1MB
+            size /= (1000 * 1000);      // 用MB显示
+            type = "MB";
+        }
+        args[4] = QString::number(size, 10, 2);  // 十进制，进度2位
+        args[4] += type;
+
         // 7. 构建文件信息结构
         _list.push_back({
             .access = args[0],
@@ -347,11 +364,12 @@ bool Ftp::put(const QString &put_file)
 
     if(!success) {
         qCriticalTime() << "Ftp::put() -> Upload failed:" << error();
-        emit errorOccurred("Upload failed: " + error());
+        // emit errorOccurred("Upload failed: " + error());
+        emit getOrPutResult("put", false, "Download failed: " + error());
     } else {
         qInfoTime() << "Ftp::put() -> Upload successful";
     }
-
+    emit getOrPutResult("put", true, "");
     return success;
 }
 
@@ -381,11 +399,12 @@ bool Ftp::get(const QString &local_file,const QString& remote_file)
 
     if(!success) {
         qCriticalTime() << "Ftp::get() -> Download failed:" << error();
-        emit errorOccurred("Download failed: " + error());
+        // emit errorOccurred("Download failed: " + error());
+        emit getOrPutResult("get", false, "Download failed: " + error());
     } else {
         qInfoTime() << "Ftp::get() -> Download successful";
     }
-
+    emit getOrPutResult("get", true, "");
     return success;
 }
 
@@ -517,7 +536,7 @@ bool Ftp::getResume(const QString& local_file, const QString& remote_file, qint6
 
     // 检查本地文件状态
     QFile localFile(local_file);
-    qint64 localSize = 0;
+    // qint64 localSize = 0;
 
     if(localFile.exists()){
         if(offset == 0){
@@ -604,7 +623,9 @@ bool Ftp::getResume(const QString& local_file, const QString& remote_file, qint6
 
         saveTransferState(transferInfo);
         emit transferFailed(transferId, error());
+        emit getOrPutResult("get", false, "Download failed: " + error());
     }
+    emit getOrPutResult("get", true, "");
     return success;
 
 }
@@ -730,8 +751,9 @@ bool Ftp::putResume(const QString& local_file, const QString& remote_file, qint6
         }
         saveTransferState(transferInfo);
         emit transferFailed(transferId, error());
+        emit getOrPutResult("put", false, "Download failed: " + error());
     }
-
+    emit getOrPutResult("put", true, "");
     return success;
 }
 

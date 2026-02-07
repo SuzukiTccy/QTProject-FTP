@@ -5,6 +5,7 @@
 #include <QCloseEvent>
 #include <QFileDialog>
 #include <QStandardPaths>
+#include <QtConcurrent>
 #include <QFile>
 
 
@@ -99,6 +100,8 @@ MainWindow::MainWindow(QWidget *parent)
 
     connect(&ftp, &Ftp::errorOccurred, this, &MainWindow::onFtpError);
     connect(&ftp, &Ftp::sslStatusChanged, this, &MainWindow::onFtpSSLStatusChanged);
+    connect(&ftp, &Ftp::getOrPutResult, this, &MainWindow::onGetPutResult);
+
 
     qInfoTime() << "MainWindow::MainWindow() -> finished";
 
@@ -213,7 +216,7 @@ void MainWindow::onConnect()
 }
 
 
-void MainWindow::cellDoubleClicked(int row, int idx)
+void MainWindow::cellDoubleClicked(int row)
 {
     // 1. 检查行号有效性
     if(row == -1)return;
@@ -283,14 +286,20 @@ void MainWindow::putAction()
         QMessageBox::warning(this,"选择文件过多！","最多选择一个文件");
         return;
     }
+
+    // qInfoTime() << "MainWindow::putAction() -> 打开的文件：" << files[0];
+    // if(!ftp.put(files[0])){
+    //     QMessageBox::warning(this,this->windowTitle(),"上传失败\n错误：" + ftp.error());
+    //     return;
+    // }
+    // QMessageBox::information(this,this->windowTitle(),"上传成功！");
+    // clear_ui_list();
+    // insert_list(ftp.dir());
     qInfoTime() << "MainWindow::putAction() -> 打开的文件：" << files[0];
-    if(!ftp.put(files[0])){
-        QMessageBox::warning(this,this->windowTitle(),"上传失败\n错误：" + ftp.error());
-        return;
-    }
-    QMessageBox::information(this,this->windowTitle(),"上传成功！");
-    clear_ui_list();
-    insert_list(ftp.dir());
+    QtConcurrent::run([this, files](){
+        ftp.put(files[0]);
+    });
+
 }
 
 void MainWindow::getAction()
@@ -320,12 +329,17 @@ void MainWindow::getAction()
         files[0] = files[0] + "/" + ui->list_file->item(row,6)->text();
     }
 
+    // qInfoTime() << "MainWindow::getAction() -> 打开的文件：" << files[0];
+    // if(!ftp.get(files[0], ui->list_file->item(row,6)->text())){
+    //     QMessageBox::warning(this,this->windowTitle(),"下载失败\n错误：" + ftp.error());
+    //     return;
+    // }
+    // QMessageBox::information(this,this->windowTitle(),"下载成功！");
+
     qInfoTime() << "MainWindow::getAction() -> 打开的文件：" << files[0];
-    if(!ftp.get(files[0], ui->list_file->item(row,6)->text())){
-        QMessageBox::warning(this,this->windowTitle(),"下载失败\n错误：" + ftp.error());
-        return;
-    }
-    QMessageBox::information(this,this->windowTitle(),"下载成功！");
+    QtConcurrent::run([this, files, row](){
+        ftp.get(files[0], ui->list_file->item(row,6)->text());
+    });
 }
 
 void MainWindow::delAction()
@@ -385,3 +399,42 @@ void MainWindow::onFtpSSLStatusChanged(bool enabled)
 {
     ui_ssl_status.setText(enabled ? "  SSL: 已启用" : "  SSL: 未启用");
 }
+
+void MainWindow::onGetPutResult(const QString& type, bool success, const QString& error){
+    if(type == "get"){
+        if(success){
+            QMessageBox::information(this,this->windowTitle(),"下载成功！");
+            return;
+        }
+        else{
+            QMessageBox::warning(this,this->windowTitle(), "下载失败\n错误：" + error);
+            return;
+        }
+    }
+    else if(type == "put"){
+        if(success){
+            QMessageBox::information(this,this->windowTitle(),"下载成功！");
+            clear_ui_list();
+            insert_list(ftp.dir());
+            return;
+        }
+        else{
+            QMessageBox::warning(this,this->windowTitle(),"下载失败\n错误：" + error);
+            return;
+        }
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -148,6 +148,8 @@ signals:
     void transferCompleted(const QString& transferId);
     void transferFailed(const QString& transferId, const QString& error);
 
+    void getOrPutResult(const QString& type, bool success, const QString& error);
+
 private:
     // 禁用拷贝和赋值
     Ftp(const Ftp&) = delete;

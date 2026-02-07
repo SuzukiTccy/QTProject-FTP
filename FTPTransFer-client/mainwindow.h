@@ -46,7 +46,7 @@ public:
 
 public slots:
     void onConnect();
-    void cellDoubleClicked(int row, int idx);
+    void cellDoubleClicked(int row);
     void cdupAction();
     void refAction();
     void putAction();
@@ -55,6 +55,8 @@ public slots:
 
     void onFtpError(const QString& error);
     void onFtpSSLStatusChanged(bool enabled);
+
+    void onGetPutResult(const QString& type, bool success, const QString& error);
 private:
     QString get_file_name(int row);
     void set_pwd();
