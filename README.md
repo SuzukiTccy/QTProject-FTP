@@ -1,7 +1,8 @@
 # C++ FTPS Server&Client(基于 libevent + OpenSSL)
 <img src="https://github.com/SuzukiTccy/QTProject-FTP/blob/master/image/License-MIT-blue.svg" width="10%" alt="liense">
-# C++ FTPS Server (基于 libevent + OpenSSL)
+基于C++ QT5/6的FTPS文件传输系统，包括图形化客户端以及高并发服务端
 
+# C++ FTPS Server (基于 libevent + OpenSSL)
 一个高性能、事件驱动的 FTPS (FTP over SSL/TLS) 服务器实现，完全由 C++ 编写。它利用 **libevent** 处理高并发网络 I/O，使用 **OpenSSL** 提供加密通道，并通过线程池模型实现多任务并行处理。
 
 ## 特性
