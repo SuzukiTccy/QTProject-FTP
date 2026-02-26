@@ -33,13 +33,13 @@
 ### 流程图
 
 #### 1. 服务器启动流程
-<img src="https://github.com/SuzukiTccy/QTProject-FTP/blob/master/image/server1.png" width="12%" alt="服务器启动流程">
+<img src="https://github.com/SuzukiTccy/QTProject-FTP/blob/master/image/server1.png" width="20%" alt="服务器启动流程">
 
 #### 2. 控制连接命令处理流程
-<img src="https://github.com/SuzukiTccy/QTProject-FTP/blob/master/image/server2.svg" width="50%" alt="控制连接命令处理流程">
+<img src="https://github.com/SuzukiTccy/QTProject-FTP/blob/master/image/server2.svg" width="70%" alt="控制连接命令处理流程">
 
 #### 3. 数据连接建立（PORT 主动模式）
-<img src="https://github.com/SuzukiTccy/QTProject-FTP/blob/master/image/server3.svg" width="50%" alt="数据连接建立（PORT 主动模式）">
+<img src="https://github.com/SuzukiTccy/QTProject-FTP/blob/master/image/server3.svg" width="70%" alt="数据连接建立（PORT 主动模式）">
 
 ## 快速开始
 
@@ -162,13 +162,13 @@ lftp -u xb1520 -e 'debug; set ftp:ssl-force true; set ssl:verify-certificate tru
 ### 流程图
 
 #### 1. 连接与登录流程
-<img src="https://github.com/SuzukiTccy/QTProject-FTP/blob/master/image/client1.svg" width="50%" alt="连接与登录流程">
+<img src="https://github.com/SuzukiTccy/QTProject-FTP/blob/master/image/client1.svg" width="70%" alt="连接与登录流程">
 
 #### 2. 文件下载（支持断点续传）
-<img src="https://github.com/SuzukiTccy/QTProject-FTP/blob/master/image/client2.svg" width="50%" alt="数据连接建立（PORT 主动模式）">
+<img src="https://github.com/SuzukiTccy/QTProject-FTP/blob/master/image/client2.svg" width="70%" alt="文件下载（支持断点续传）">
 
 #### 3. 暂停/恢复传输
-<img src="https://github.com/SuzukiTccy/QTProject-FTP/blob/master/image/client3.svg" width="50%" alt="数据连接建立（PORT 主动模式）">
+<img src="https://github.com/SuzukiTccy/QTProject-FTP/blob/master/image/client3.svg" width="70%" alt="暂停/恢复传输">
 
 
 ## 快速开始
