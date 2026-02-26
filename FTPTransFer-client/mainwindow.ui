@@ -20,7 +20,7 @@
       <x>10</x>
       <y>10</y>
       <width>821</width>
-      <height>571</height>
+      <height>541</height>
      </rect>
     </property>
     <property name="font">
@@ -37,7 +37,7 @@
        <x>10</x>
        <y>40</y>
        <width>791</width>
-       <height>511</height>
+       <height>471</height>
       </rect>
      </property>
      <property name="styleSheet">
@@ -45,32 +45,34 @@
      </property>
     </widget>
    </widget>
-   <widget class="QGroupBox" name="groupBox_2">
+   <widget class="QGroupBox" name="groupBox_3">
     <property name="geometry">
      <rect>
       <x>10</x>
-      <y>590</y>
+      <y>560</y>
       <width>821</width>
-      <height>221</height>
+      <height>251</height>
      </rect>
     </property>
     <property name="font">
      <font>
-      <family>Academy Engraved LET</family>
       <pointsize>14</pointsize>
      </font>
     </property>
     <property name="title">
-     <string>传输列表</string>
+     <string>文件列表</string>
     </property>
-    <widget class="QListView" name="listView">
+    <widget class="QTableWidget" name="list_transfer">
      <property name="geometry">
       <rect>
        <x>10</x>
-       <y>30</y>
-       <width>801</width>
-       <height>181</height>
+       <y>40</y>
+       <width>791</width>
+       <height>201</height>
       </rect>
+     </property>
+     <property name="styleSheet">
+      <string notr="true"/>
      </property>
     </widget>
    </widget>

@@ -12,6 +12,7 @@
 #include <QCryptographicHash>
 #include <QDir>
 #include <QTimer>
+#include <QtConcurrent>
 
 Ftp::Ftp(QObject* parent) :
     QObject(parent)
@@ -351,9 +352,13 @@ bool Ftp::put(const QString &put_file)
     // 检查是否支持断点续传
     bool resumeSupported = checkResumeSupported(remote_file);
 
-    if (resumeSupported) {
+    if (!resumeSupported) {
         // 使用断点续传功能
-        return putResume(put_file, remote_file, 0);
+        if (error().contains("not found", Qt::CaseInsensitive) ||
+            error().contains("not exist", Qt::CaseInsensitive)){
+            // 远端文件不存在，所以checkResumeSupported失败的情况
+            return putResume(put_file, remote_file, 0);
+        }
     }
 
     // 使用普通上传
@@ -577,6 +582,26 @@ bool Ftp::getResume(const QString& local_file, const QString& remote_file, qint6
 
     emit transferStarted(transferId, transferInfo);
 
+    QtConcurrent::run([this, transferId, totalSize, local_file](){
+        QFile localFile(local_file);
+        qint64 local_size = localFile.size();
+        int timeoutCounter = 0;   // 超时计数器
+        while(local_size < totalSize){
+            qint64 temp_size = localFile.size();
+            if(temp_size == local_size) timeoutCounter++;
+            if(timeoutCounter >= 5){
+                qWarningTime() << "Ftp::getResume() -> timeoutCounter >= 5";
+                return;
+            } else {
+                timeoutCounter = 0;
+                local_size = temp_size;
+            }
+            emit transferProgress(transferId, local_size, totalSize);
+            // 等待500ms
+            QThread::msleep(500);
+        }
+    });
+
     // 执行带偏移的下载
     qInfoTime() << "Ftp::getResume() -> Starting download with offset" << offset;
 
@@ -600,7 +625,7 @@ bool Ftp::getResume(const QString& local_file, const QString& remote_file, qint6
         saveTransferState(transferInfo);
         emit transferCompleted(transferId);
 
-        // 清理完成的状态
+        // 清理完成的状态,
         QTimer::singleShot(5000, this, [this, transferId](){
             removeTransferState(transferId);
             {
@@ -671,6 +696,7 @@ bool Ftp::putResume(const QString& local_file, const QString& remote_file, qint6
         // 检查文件是否完整
         if(offset == totalSize){
             qInfoTime() << "Ftp::putResume() -> File already fully uploaded";
+            emit getOrPutResult("put", false, "Download failed: File already fully uploaded");
             return true;
         }else{
             qCriticalTime() << "Ftp::putResume() -> Invalid offset, starting from beginning";
@@ -705,6 +731,27 @@ bool Ftp::putResume(const QString& local_file, const QString& remote_file, qint6
     }
 
     emit transferStarted(transferId, transferInfo);
+
+
+    QtConcurrent::run([this, transferId, totalSize, local_file](){
+        QFile localFile(local_file);
+        qint64 local_size = localFile.size();
+        int timeoutCounter = 0;   // 超时计数器
+        while(local_size < totalSize){
+            qint64 temp_size = localFile.size();
+            if(temp_size == local_size) timeoutCounter++;
+            if(timeoutCounter >= 5){
+                qWarningTime() << "Ftp::getResume() -> timeoutCounter >= 5";
+                return;
+            } else {
+                timeoutCounter = 0;
+                local_size = temp_size;
+            }
+            emit transferProgress(transferId, local_size, totalSize);
+            // 等待500ms
+            QThread::msleep(500);
+        }
+    });
 
     // 执行带偏移的上传
     qInfoTime() << "Ftp::putResume() -> Starting upload with offset" << offset;

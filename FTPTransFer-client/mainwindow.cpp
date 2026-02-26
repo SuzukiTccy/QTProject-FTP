@@ -58,10 +58,18 @@ void MainWindow::init_Flist_menu()
     // 可选：设置列宽的最小值，避免拉伸时过窄
     header->setMinimumSectionSize(80);
 
+
+    // 传输列表初始化
+    ui->list_transfer->setColumnCount(2);
+    ui->list_transfer->setHorizontalHeaderLabels({"传输","文件名"});
+    header = ui->list_transfer->horizontalHeader();
+    header->setSectionResizeMode(0, QHeaderView::ResizeToContents);
+    header->setSectionResizeMode(1, QHeaderView::Stretch);
+    header->setMinimumSectionSize(100);
+
+
     qDebugTime() << "Init_Flist_menu finished";
 }
-
-
 
 
 
@@ -101,6 +109,9 @@ MainWindow::MainWindow(QWidget *parent)
     connect(&ftp, &Ftp::errorOccurred, this, &MainWindow::onFtpError);
     connect(&ftp, &Ftp::sslStatusChanged, this, &MainWindow::onFtpSSLStatusChanged);
     connect(&ftp, &Ftp::getOrPutResult, this, &MainWindow::onGetPutResult);
+    connect(&ftp, &Ftp::transferProgress, this, &MainWindow::onProgressUpdate);
+    connect(&ftp, &Ftp::transferStarted, this, &MainWindow::OnTransferInsertRow);
+    connect(&ftp, &Ftp::transferCompleted, this, &MainWindow::onTransferCompleted);
 
 
     qInfoTime() << "MainWindow::MainWindow() -> finished";
@@ -182,6 +193,57 @@ void MainWindow::insert_item(int row,int idx,QString item)
     ui->list_file->item(row,idx)->setFlags(Qt::ItemIsSelectable | Qt::ItemIsUserCheckable | Qt::ItemIsEnabled);
 }
 
+
+void MainWindow::OnTransferInsertRow(const QString& transferId, const FTP_TRANSFER_INFO& info){
+    // 在顶部插入新行
+    ui->list_transfer->insertRow(0);
+
+    // 设置两列数据
+    QString type = info.isUpload ? "上传" : "下载";
+    QTableWidgetItem *item = new QTableWidgetItem(type);
+    item->setTextAlignment(Qt::AlignHCenter | Qt::AlignVCenter);
+    ui->list_transfer->setItem(0, 0, item);
+
+    item = new QTableWidgetItem(info.localPath + "  0%");
+    item->setData(Qt::UserRole, transferId);
+    ui->list_transfer->setItem(0, 1, item);
+}
+
+
+void MainWindow::onTransferCompleted(const QString& transferId){
+    for(int i = 0; i < ui->list_transfer->rowCount(); ++i){
+        QTableWidgetItem *item = ui->list_transfer->item(i, 1);
+        QString Id = item->data(Qt::UserRole).toString();
+        if (transferId == Id){
+            QString ordinary = item->text();
+            ordinary = ordinary.split(" ")[0];
+            item->setText(ordinary + "  100%");
+
+            item = ui->list_transfer->item(i, 0);
+            ordinary = item->text();
+            ordinary = ordinary.left(2);
+            item->setText(ordinary + "完成");
+            break;
+        }
+    }
+}
+
+
+void MainWindow::onProgressUpdate(const QString& transferId,
+                                  qint64 bytesTransferred, qint64 totalBytes){
+    // for(int i = 0; i < ui->list_transfer->rowCount(); ++i){
+    //     QTableWidgetItem *item = ui->list_transfer->item(i, 1);
+    //     QString Id = item->data(Qt::UserRole).toString();
+    //     if (transferId == Id){
+    //         QString ordinary = item->text();
+    //         ordinary = ordinary.split(" ")[0];
+    //         item->setText(ordinary + "  100%");
+    //         break;
+    //     }
+    // }
+}
+
+
 void MainWindow::onConnect()
 {
     FtpConnectDlg dlg(this);
@@ -200,8 +262,9 @@ void MainWindow::onConnect()
     ui_connect_status.setText("连接成功：" + data.host +
                               (data.useSSL ? " (SSL加密)" : " (非加密)"));
 
-    clear_ui_list();         // 清空表格内容
-    set_pwd();               // 设置当前路径
+    clear_ui_list();                      // 清空表格内容
+    set_pwd();                            // 设置当前路径
+    ui->list_transfer->setRowCount(0);    // 清空传输列表
 
 
     // 尝试获取目录列表，如果失败可能是SSL数据连接问题
@@ -424,8 +487,6 @@ void MainWindow::onGetPutResult(const QString& type, bool success, const QString
         }
     }
 }
-
-
 
 
 

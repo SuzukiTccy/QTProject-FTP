@@ -57,6 +57,10 @@ public slots:
     void onFtpSSLStatusChanged(bool enabled);
 
     void onGetPutResult(const QString& type, bool success, const QString& error);
+    void onProgressUpdate(const QString& transferId, qint64 bytesTransferred,
+                          qint64 totalBytes);
+    void OnTransferInsertRow(const QString& transferId, const FTP_TRANSFER_INFO& info);
+    void onTransferCompleted(const QString& transferId);
 private:
     QString get_file_name(int row);
     void set_pwd();
