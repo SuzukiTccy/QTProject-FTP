@@ -1,140 +1,188 @@
-# 系统架构设计
-## 分层架构
-- 网络层：基于libevent的异步事件驱动框架
-- 线程池层：XThreadPool实现的工作线程池，支持并发处理
-- 任务调度层：XTask抽象基类和任务分发机制
-- 协议处理层：FTP协议命令解析和响应处理
-- 安全层：OpenSSL TLS/SSL支持
+# C++ FTPS Server (基于 libevent + OpenSSL)
 
-## 核心设计模式
-- 工厂模式：XFtpFactory统一创建FTP任务对象
-- 策略模式：每个FTP命令对应独立的处理类
-- 线程池模式：工作线程池管理并发连接
-- 事件驱动模式：基于libevent的异步IO处理
+[](https://license/)[https://img.shields.io/badge/License-MIT-blue.svg](https://img.shields.io/badge/License-MIT-blue.svg)  
+一个高性能、事件驱动的 FTPS (FTP over SSL/TLS) 服务器实现，完全由 C++ 编写。它利用 **libevent** 处理高并发网络 I/O，使用 **OpenSSL** 提供加密通道，并通过线程池模型实现多任务并行处理。
 
-## 线程模型
-text
-主线程 (监听) → 线程池 (10个工作线程) → 事件循环 (每个线程独立)
-    接收新连接       分发任务到空闲线程      处理FTP命令和数据传输
+## 特性
 
-# 实现功能
-## 1. FTP协议支持
+- ✅ **完整 FTP 核心命令支持** (RFC 959)
+- ✅ **加密控制通道** – `AUTH TLS` / `AUTH SSL`，强制使用 TLS 加密登录及命令传输
+- ✅ **加密数据通道** – `PROT P` 保护数据传输，`PROT C` 可选明文
+- ✅ **断点续传** – 支持 `REST` 命令，可从指定偏移量继续上传/下载
+- ✅ **主动模式 (PORT)** 数据连接
+- ✅ **文件列表 (LIST / PWD / CWD / CDUP)**
+- ✅ **文件上传 (STOR) / 下载 (RETR)**
+- ✅ **获取文件大小 (SIZE)**
+- ✅ **多线程线程池** – 主线程负责监听，工作线程独立运行 libevent 事件循环，高效处理并发连接
+- ✅ **模块化设计** – 新增 FTP 命令只需继承 `XFtpTask` 并注册即可
 
-  ✅ 控制连接：标准FTP端口21
-  
-  ✅ 用户认证：USER/PASS命令（当前为模拟认证）
+## 架构设计
 
-  ✅ 目录操作：
-  - LIST - 列出目录内容
-  - CWD - 切换工作目录
-  - CDUP - 返回上级目录
-  - PWD - 打印当前目录
-	
-  ✅ 文件传输：
-  - RETR - 下载文件（支持大文件分块传输）
-  - STOR - 上传文件（支持大文件接收）
-	
-  ✅ 连接模式：
-  - PORT模式 - 主动模式数据连接
+### 整体模块
 
-  ✅ 数据类型：TYPE命令支持
-  
-  ✅ 安全扩展：
-  - AUTH TLS/SSL - 开启安全连接
-  - PBSZ - 保护缓冲区大小协商
-  - PROT - 保护级别设置
+| 模块              | 职责                                                             |
+| --------------- | -------------------------------------------------------------- |
+| `main.cpp`      | 初始化 OpenSSL、线程池、创建 TCP 监听器，启动事件循环                              |
+| `XThreadPool`   | 管理一组工作线程，采用轮询分发新连接                                             |
+| `XThread`       | 每个工作线程拥有独立的 `event_base`，通过管道与主线程通信，处理分配到该线程的客户端连接             |
+| `XFtpServerCMD` | 控制连接的任务对象，负责解析 FTP 命令并分发至具体命令处理器                               |
+| `XFtpTask` 派生类  | 实现具体 FTP 命令，如 `XFtpLIST`, `XFtpRETR`, `XFtpSTOR`, `XFtpAUTH` 等 |
+| `XFtpFactory`   | 工厂类，为每个新连接创建 `XFtpServerCMD` 对象并注册所有命令处理器                      |
 
-## 2. 安全性实现
-  ✅ TLS/SSL加密：支持FTP over TLS
+### 流程图
 
-  ✅ 证书管理：自签名证书生成和使用
-  
-  ✅ 协议安全：
-  - 禁用旧协议（SSLv2, SSLv3, TLSv1.0）
-  - 强制TLSv1.2+
+#### 1. 服务器启动流程
+```graph TD
+    A[main] --> B[初始化 OpenSSL]
+    B --> C[创建线程池 XThreadPool::Init]
+    C --> D[创建监听器 evconnlistener]
+    D --> E[进入事件循环 event_base_dispatch]
+    E --> F{收到新连接?}
+    F -->|是| G[调用 listen_cb]
+    G --> H[通过工厂创建 XFtpServerCMD 任务]
+    H --> I[线程池 Dispatch 到某个工作线程]
+    I --> J[工作线程的管道写 'c' 唤醒]
+    J --> K[工作线程执行任务 Init]
+```
 
-  ✅ 路径安全：简单的命令注入防护
+#### 2. 控制连接命令处理流程
+```cpp
+sequenceDiagram
+    participant Client
+    participant WorkerThread
+    participant XFtpServerCMD
+    participant XFtpTask
 
-## 3. 性能特性
-  ✅ 异步IO：非阻塞网络操作
+    Client->>WorkerThread: 发送命令 (如 "LIST\r\n")
+    WorkerThread->>XFtpServerCMD: Read 回调
+    XFtpServerCMD->>XFtpServerCMD: 累积数据，提取完整命令
+    XFtpServerCMD->>XftpTask: 根据命令类型查找处理器
+    XftpTask->>XftpTask: 执行 Parse 逻辑
+    XftpTask->>XFtpServerCMD: 调用 ResCMD 发送响应
+    XFtpServerCMD-->>Client: 响应
+```
 
-  ✅ 内存管理：智能指针避免内存泄漏
-  
-  ✅ 缓冲区管理：分块传输大文件（1MB缓冲区）
-  
-  ✅ 连接复用：工作线程复用
-  
-  ✅ 超时控制：连接、传输超时机制
+#### 3. 数据连接建立（PORT 主动模式）
+```
+sequenceDiagram
+    participant Client
+    participant XFtpTask (e.g. LIST)
+    participant DataConnection
 
-## 4. 可维护性特性
-  ✅ 模块化设计：每个FTP命令独立类
+    Client->>XFtpTask: PORT 命令 (包含IP和端口)
+    XFtpTask->>XFtpTask: 解析IP和端口
+    XFtpTask->>DataConnection: 调用 ConnectoPORT()
+    DataConnection->>DataConnection: 创建新 socket 连接客户端指定端口
+    DataConnection-->>Client: 建立 TCP 连接
+    Note over DataConnection,Client: 若启用 SSL，此时进行握手
+    DataConnection->>DataConnection: 触发 CONNECTED 事件
+    DataConnection->>Client: 发送数据 (或接收)
+    DataConnection-->>XFtpTask: 传输完成，关闭
+```
 
-  ✅ 日志系统：分级日志输出
-  
-  ✅ 错误处理：详细的错误响应码
-  
-  ✅ 配置分离：根目录、端口可配置
+## 快速开始
 
-# 技术栈
-组件	技术选型	用途
-网络框架	libevent 2.x	异步事件驱动
-安全协议	OpenSSL	TLS/SSL加密
-线程管理	C++11 std::thread	线程池实现
-内存管理	C++11智能指针	自动资源管理
-构建系统	未指定（应为CMake/Make）	项目构建
-平台支持	POSIX兼容系统	跨平台支持
+### 依赖项
 
-# 数据处理流程
-text
-客户端连接 → 主线程接收 → 分配到线程池 → 创建XFtpServerCMD
-    ↓
-命令接收（ReadCB）→ 解析命令 → 查找注册处理器 → 执行Parse()
-    ↓
-数据连接建立（ConnectoPORT）→ SSL握手（如启用）→ 数据传输
-    ↓
-事件回调（EventCB）→ 清理资源 → 返回响应
+- C++17 编译器
+- [libevent](https://libevent.org/) (>= 2.1)
+- [OpenSSL](https://www.openssl.org/) (>= 1.1.1)
 
-# 代码质量特点
-- 工程结构清晰：头文件/源文件分离，职责明确
-- 错误处理完善：FTP标准响应码，详细日志
-- 资源管理严谨：RAII模式，智能指针管理生命周期
-- 扩展性良好：新命令通过工厂模式轻松添加
-- 配置灵活：证书、端口、目录可配置
+### 编译
 
-# 已知限制和改进点
-## 当前限制
-❌ 被动模式（PASV）未实现：仅支持主动模式
+使用Makefile构建：
+```bash
+git clone https://github.com/SuzukiTccy/QTProject-FTP.git
+cd FTPTransfer-server
+make -j
+```
 
-❌ 真实用户认证：当前为模拟认证
+### 生成自签名证书
 
-❌ IPv6支持：仅支持IPv4
+FTPS 需要服务器证书和私钥（PEM 格式）。可使用 OpenSSL 快速生成
+项目自带generate_cert.sh，可生成证书和私钥
+```bash
+sh generate_cert.sh
+```
+将生成的 `server.crt` 和 `server.key` 放置于工作目录。
 
-❌ 断点续传：未实现REST命令
+### 运行
+```bash
+./ftps_server
+```
+默认监听 **21** 端口。可通过修改 `main.cpp` 中的 `SPORT` 宏更改。
 
-❌ 文件权限管理：简单的目录访问控制
+### 测试
 
-## 潜在改进
-### 1. 性能优化：
-- 实现连接池
-- 添加内存池减少分配开销
-- 支持零拷贝传输
+使用支持 TLS 的 FTP 客户端（如 FileZilla、lftp）连接：
+```text
+主机: 127.0.0.1
+端口: 21
+协议: FTP over TLS (显式加密)
+用户名: 任意 (目前未校验)
+密码: 任意
+```
 
-### 2. 功能增强：
-- 实现PASV被动模式
-- 添加用户认证数据库
-- 支持断点续传
-- 实现配额管理
+使用lftp进行测试：
+```bash
+# 上传下载文件
+lftp -u xb1520 -e 'debug; set ftp:ssl-force true; set ftp:passive-mode off; get 文件名' localhost
 
-### 3. 安全性提升：
-- 添加暴力破解防护
-- 实现IP黑名单
-- 支持证书吊销列表
+lftp -u xb1520 -e 'debug; set ftp:ssl-force true; set ftp:passive-mode off; put 本地文件名' localhost
 
-# 项目亮点
-- 现代C++实践：合理使用C++11特性
-- 生产级设计：考虑了超时、错误恢复、资源清理
-- 协议完整性：实现了FTP核心协议和TLS扩展
-- 并发处理能力：线程池+异步IO的高并发支持
-- 可观测性：详细的日志系统便于调试和维护
+lftp -u xb1520 -e 'debug; set ftp:ssl-force true; set ssl:verify-certificate true; set ftp:passive-mode off; get 摄影师之眼.pdf' localhost
 
-这个FTP服务器项目展示了完整的网络服务开发技能，从底层网络编程到高层协议实现，体现了良好的软件工程实践。可以作为学习异步编程、协议实现、多线程设计的优秀案例。
+lftp -u xb1520 -e 'debug; set ftp:ssl-force true; set ssl:verify-certificate true; set ftp:passive-mode off; put 摄影师之眼.pdf' localhost
+```
+
+## 已实现的 FTP 命令
+| 命令     | 功能       | 备注                          |
+| ------ | -------- | --------------------------- |
+| `USER` | 用户名      | 框架实现，可扩展认证                  |
+| `PASS` | 密码       | 总是成功                        |
+| `TYPE` | 传输类型     | 总是成功                        |
+| `PORT` | 主动模式端口   | 解析 IP 和端口                   |
+| `LIST` | 列表目录     | 支持 `PWD`、`CWD`、`CDUP` 共享处理器 |
+| `RETR` | 下载文件     | 支持断点续传                      |
+| `STOR` | 上传文件     | 支持断点续传                      |
+| `AUTH` | 认证机制     | 支持 `TLS` / `SSL`，切换控制连接到加密  |
+| `PBSZ` | 保护缓冲区大小  | 固定响应 `200 PBSZ=0`           |
+| `PROT` | 数据通道保护级别 | 支持 `P` (私有) / `C` (明文)      |
+| `REST` | 断点续传偏移量  | 设置偏移量，用于后续 `RETR` / `STOR`  |
+| `SIZE` | 获取文件大小   | 返回 `213` 响应                 |
+| `PWD`  | 打印当前目录   | 由 `XFtpLIST` 处理             |
+| `CWD`  | 改变目录     | 由 `XFtpLIST` 处理             |
+| `CDUP` | 返回上级目录   | 由 `XFtpLIST` 处理             |
+
+## 配置说明
+
+- **根目录**：默认限制在 `/Users/username/`，可在 `XFtpTask.h` 中修改 `rootDir` 变量。
+    
+- **线程数**：在 `main.cpp` 中 `XThreadPoolGet->Init(10)` 可调整工作线程数量。
+    
+- **证书路径**：目前硬编码为 `server.crt` 和 `server.key`，可根据需要修改 `main.cpp` 中的文件名
+
+## 待办 / 已知问题
+
+- 被动模式 (PASV) 尚未实现。
+- 目录列表格式为 `ls -la` 输出，不完全符合 FTP 标准格式（但大多数客户端兼容）。
+- 未实现 `ABOR` 命令中断传输
+- 内存管理可进一步优化（智能指针已部分使用，但仍有原始指针）
+
+## 贡献
+
+欢迎任何形式的贡献！无论是新功能、bug 修复、文档改进，都请提交 issue 或 pull request。在开发前请确保代码遵循现有风格，并通过基础测试。
+
+1. Fork 本仓库
+2. 创建您的特性分支 (`git checkout -b feature/amazing-feature`)
+3. 提交您的更改 (`git commit -m 'Add some amazing feature'`)
+4. 推送到分支 (`git push origin feature/amazing-feature`)
+5. 打开一个 Pull Request
+
+## 许可证
+
+本项目基于 MIT 许可证开源，详情请见 [LICENSE](https://license/) 文件。
+
+---
+
+**注意**：本项目为学习与实验目的编写，生产环境使用前请进行充分测试和安全加固
