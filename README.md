@@ -33,7 +33,7 @@
 ### 流程图
 
 #### 1. 服务器启动流程
-https://github.com/SuzukiTccy/QTProject-FTP/blob/master/image/server1.png
+![服务器启动流程](https://github.com/SuzukiTccy/QTProject-FTP/blob/master/image/server1.png))
 
 #### 2. 控制连接命令处理流程
 https://github.com/SuzukiTccy/QTProject-FTP/blob/master/image/server2.svg
