@@ -115,6 +115,7 @@ bool Ftp::initSSL()
 
         // 检查是否服务器支持SSL
         QString resp = error();
+        qWarningTime() << "Ftp::initSSL() -> ERROR: " << resp;
         if(resp.contains("not supported", Qt::CaseInsensitive) ||
             resp.contains("not implemented", Qt::CaseInsensitive)) {
             qWarningTime() << "Ftp::initSSL() -> Server does not support SSL/TLS";
