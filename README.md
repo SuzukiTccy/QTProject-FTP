@@ -1,5 +1,5 @@
 # C++ FTPS Server&Client(基于 libevent + OpenSSL)
-<img src="https://github.com/SuzukiTccy/QTProject-FTP/blob/master/image/License-MIT-blue.svg" width="10%" alt="liense">
+<p align="center"> <a href="#"><img src="https://img.shields.io/badge/版本-1.0.0-blue.svg" alt="版本"></a> <a href="#"><img src="https://img.shields.io/badge/Qt-5.15%2B-green.svg" alt="Qt"></a> <a href="#"><img src="https://img.shields.io/badge/OpenCV-4.5%2B-orange.svg" alt="OpenCV"></a> <a href="#"><img src="https://img.shields.io/badge/许可证-MPL%202.0-blue.svg" alt="许可证"></a> </p>
 基于C++ QT5/6的FTPS文件传输系统，包括图形化客户端以及高并发服务端
 
 # C++ FTPS Server (基于 libevent + OpenSSL)
@@ -34,7 +34,7 @@
 ### 流程图
 
 #### 1. 服务器启动流程
-<img src="https://github.com/SuzukiTccy/QTProject-FTP/blob/master/image/server1.png" width="20%" alt="服务器启动流程">
+<img src="https://github.com/SuzukiTccy/QTProject-FTP/blob/master/image/server1.png" width="20%" alt="服务器启动流程"> 
 
 #### 2. 控制连接命令处理流程
 <img src="https://github.com/SuzukiTccy/QTProject-FTP/blob/master/image/server2.svg" width="70%" alt="控制连接命令处理流程">
@@ -254,7 +254,7 @@ lftp -u xb1520 -e 'debug; set ftp:ssl-force true; set ssl:verify-certificate tru
 
 # 许可证
 
-本项目基于 MIT 许可证开源，详情请见 [LICENSE](https://license/) 文件。
+本项目基于 MPL2.0 许可证开源，详情请见 [LICENSE](https://license/) 文件。
 
 ---
 
