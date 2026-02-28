@@ -126,7 +126,7 @@ int main(){
     signal(SIGTERM, signal_handler);
 
     // 1. 初始化线程池
-    XThreadPoolGet->Init(10);
+    XThreadPoolGet->Init(20);
 
     // 2. 初始化libevent事件循环基座
     event_base *base = event_base_new();

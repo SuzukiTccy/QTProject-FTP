@@ -62,7 +62,21 @@ void XFtpServerCMD::Event(bufferevent *bev, short events){
     }
     // 关闭连接
     ClosePORT();
-    this->thread->clearConnectedTasks(this);
+
+    // 延迟销毁连接，确保响应消息发送完成
+    if(this->base){
+        // 定义静态回调函数
+        struct CleanupCallback{
+            static void cb(evutil_socket_t, short, void *arg){
+                XFtpServerCMD *self = static_cast<XFtpServerCMD*>(arg);
+                if(self && self->thread){
+                    self->thread->clearConnectedTasks(self); // 清除连接
+                }
+            }
+        };
+        event_base_once(this->base, -1, EV_TIMEOUT, CleanupCallback::cb, this, nullptr);
+    }
+
     Logger::info("XFtpServerCMD::Event() close connection");
 }
 
@@ -182,12 +196,12 @@ XFtpServerCMD::~XFtpServerCMD(){
 
     // 清理注册的命令处理器
     for(auto &pair : calls_map){
-        Logger::info("XFtpServerCMD::~XFtpServerCMD() delete ", pair.second, " ", pair.first);
         if(pair.second != nullptr) continue;
         delete pair.second;
         pair.second = nullptr;
     }
     calls_map.clear();
+    Logger::info("XFtpServerCMD::~XFtpServerCMD() cleared calls_map");
 
     // 清理删除的命令处理器
     // for(auto &pair : callsDel_map){
@@ -197,10 +211,10 @@ XFtpServerCMD::~XFtpServerCMD(){
     // callsDel_map.clear();
 
     // 清理控制连接的bev
-    if (bev && cmdTask == this){
-        // 这是控制连接，确保正常关闭
-        bufferevent_free(bev);
-        bev = nullptr;
-    }
+    // if (bev && cmdTask == this){
+    //     // 这是控制连接，确保正常关闭
+    //     bufferevent_free(bev);
+    //     bev = nullptr;
+    // }
     ClosePORT();
 }

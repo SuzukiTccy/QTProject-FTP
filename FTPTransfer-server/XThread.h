@@ -96,8 +96,8 @@ private:
     evutil_socket_t notify_send_fd = -1;                                         //< 通知管道的发送端文件描述符，用于唤醒事件循环
     evutil_socket_t notify_recv_fd = -1;                                         // 管道读端
     event_base* base = nullptr;                                                  //< libevent事件循环基座，管理所有事件和回调
-    std::queue<std::shared_ptr<XFtpServerCMD>> connect_tasks;                     //< 任务队列，存储待处理的XTask对象指针
-    std::list<std::shared_ptr<XFtpServerCMD>> active_tasks;     //< 任务队列，存储待处理的XTask对象指针
+    std::queue<std::shared_ptr<XFtpServerCMD>> connect_tasks;                    //< 任务队列，存储待处理的XTask对象指针
+    std::list<std::shared_ptr<XFtpServerCMD>> active_tasks;                      //< 任务队列，存储正在处理的XTask对象指针
     std::mutex tasks_mutex;                   //< 任务队列互斥锁，保证线程安全访问
     struct event *notify_event;               // 通知事件对象
 };

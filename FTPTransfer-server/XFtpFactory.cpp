@@ -12,6 +12,7 @@
 #include "XFtpPROT.h"
 #include "XFtpREST.h"
 #include "XFtpSIZE.h"
+#include "XFtpQUIT.h"
 #include "testUtil.h"
 #include <memory>           // 智能指针
 
@@ -43,6 +44,8 @@ std::shared_ptr<XFtpServerCMD> XFtpFactory::CreateTask(){
     // 断点续传命令注册
     cmd->Reg("REST", new XFtpREST());
     cmd->Reg("SIZE", new XFtpSIZE());
+
+    cmd->Reg("QUIT", new XFtpQUIT());     // 注册 QUIT 命令
 
     return cmd;
 }

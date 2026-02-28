@@ -138,6 +138,8 @@ void XThread::AddTask(std::shared_ptr<XFtpServerCMD> t){
     connect_tasks.push(t);
     tasks_mutex.unlock();
 
+    Logger::info("XThread::AddTask() -> Thread_id ", id, ": task added, total active tasks: ", active_tasks.size());
+
     Activate(); // 唤醒线程
 }
 
@@ -153,7 +155,6 @@ void XThread::Stop(){
     }
 }
 
-
 void XThread::clearConnectedTasks(XFtpServerCMD* task){
     Logger::info("XThread::clearConnectedTasks() -> Thread_id ", id);
     if(!task){
@@ -162,14 +163,17 @@ void XThread::clearConnectedTasks(XFtpServerCMD* task){
     }
     
     for(auto it = active_tasks.begin(); it != active_tasks.end(); it++){
-        if(it->get()->cmdTask == task){
+        if(it->get() == task){
             active_tasks.erase(it);
             Logger::info("XThread::clearConnectedTasks() -> Thread_id ", id, 
                 ": XFtpServerCMD ", task, " ip :", task->ip,
                 "removed from active_tasks");
-            return;
+            break;
         }
     }
+
+    Logger::info("XThread::clearConnectedTasks() -> Thread_id ", id, 
+                ": active_tasks size after clear: ", active_tasks.size());
 }
 
 
